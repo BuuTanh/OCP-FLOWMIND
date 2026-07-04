@@ -465,17 +465,19 @@ function _getPendingEmailResults() {
     const row = data[rowIdx];
     // Tái tạo result object tối giản để sendDigestEmail dùng được
     const rec        = String(row[header.indexOf('khuyến nghị')] || '');
-    const confidence = String(row[header.indexOf('confidence')]  || '');
+    const confRaw    = row[header.indexOf('confidence')];
+    // Sheets lưu "64%" thành số 0.64 — nhân 100 để ra confidence_score đúng
+    const confNum    = typeof confRaw === 'number' ? confRaw : parseFloat(String(confRaw)) / 100;
     const alerts     = Number(row[header.indexOf('alerts')]      || 0);
     const crisis     = String(row[header.indexOf('crisis')]      || '').includes('CÓ');
     const note       = String(row[header.indexOf('ghi chú dpa')] || '');
     pending.push({
       contractId,
-      rowNum: rowIdx + 1, // 1-indexed for sheet
+      rowNum: rowIdx + 1,
       result: {
         zone_decision: {
           recommendation:   rec,
-          confidence_score: parseFloat(confidence) / 100 || 0,
+          confidence_score: confNum || 0,
           risk_alerts:      Array(alerts).fill('alert'),
           three_reasons:    note ? note.split(' | ') : [],
         },
