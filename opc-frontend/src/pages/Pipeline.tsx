@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { useLocation } from 'react-router-dom';
 import { Play, CheckCircle, AlertTriangle, Loader, ChevronDown, ChevronUp,
          XCircle, Clock, FileCheck, Banknote, X, ArrowRight, User, Target, Database, History,
@@ -11,6 +10,23 @@ import type { AnalysisResult } from '../types';
 import type { ContractDecision } from '../context/AppContext';
 
 const CONTRACTS_FALLBACK = ['CON-001', 'CON-002', 'CON-003', 'CON-004', 'CON-005'];
+
+// Render markdown-lite: **bold**, numbered paragraphs, line breaks
+function renderMd(text: string) {
+  return text.split('\n').filter(l => l.trim()).map((line, i) => {
+    const parts: React.ReactNode[] = [];
+    let last = 0;
+    const re = /\*\*(.+?)\*\*/g;
+    let m;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) parts.push(line.slice(last, m.index));
+      parts.push(<strong key={m.index} className="font-semibold">{m[1]}</strong>);
+      last = m.index + m[0].length;
+    }
+    if (last < line.length) parts.push(line.slice(last));
+    return <p key={i} className="mt-2 first:mt-0">{parts}</p>;
+  });
+}
 
 const REC_LABELS: Record<string, string> = {
   KY: '✅ KÝ HỢP ĐỒNG',
@@ -482,9 +498,9 @@ function StepCard({ step, expanded, onToggle }: { step: { agent: string; status:
       </button>
       {expanded && (
         <div className="px-5 py-4 text-sm text-slate-600 bg-white whitespace-pre-line leading-relaxed">
-          <ReactMarkdown className="prose prose-sm max-w-none prose-p:my-1 prose-strong:text-slate-800 prose-ul:my-1 prose-li:my-0.5">
-            {step.summary || 'Không có thông tin chi tiết.'}
-          </ReactMarkdown>
+          <div className="text-sm leading-relaxed text-slate-700">
+            {renderMd(step.summary || 'Không có thông tin chi tiết.')}
+          </div>
         </div>
       )}
     </div>
@@ -958,9 +974,7 @@ export function Pipeline() {
             <div className="text-sm mt-1 opacity-80">Confidence: {(decision.confidence_score * 100).toFixed(0)}%</div>
             {decision.narrative && (
               <div className="text-sm mt-3 leading-relaxed opacity-90 border-t border-current/20 pt-3">
-                <ReactMarkdown className="prose prose-sm max-w-none prose-p:my-1 prose-strong:font-bold prose-ul:my-1 prose-li:my-0.5 [&_*]:text-inherit">
-                  {decision.narrative}
-                </ReactMarkdown>
+                {renderMd(decision.narrative)}
               </div>
             )}
           </div>
