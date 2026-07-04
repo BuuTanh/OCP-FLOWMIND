@@ -418,9 +418,12 @@ def set_schedule(body: dict):
                 timeout=15,
                 allow_redirects=True,
             )
-            apps_script_result = r.json() if r.status_code == 200 else {"error": r.status_code}
+            try:
+                apps_script_result = r.json() if r.status_code == 200 else {"status": "skipped", "code": r.status_code}
+            except Exception:
+                apps_script_result = {"status": "ok_no_json"}
         except Exception as e:
-            apps_script_result = {"error": str(e)}
+            apps_script_result = {"status": "unreachable", "detail": str(e)}
 
     return {
         "status":           "ok",

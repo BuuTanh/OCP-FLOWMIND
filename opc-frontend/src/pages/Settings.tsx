@@ -52,10 +52,7 @@ export function Settings() {
         interval: schedule,
         apps_script_url: appsScriptUrl,
       });
-      const appsResult = res.data?.apps_script;
-      if (appsResult?.error) {
-        setSchedError('Không thể gọi Apps Script: ' + JSON.stringify(appsResult.error));
-      }
+      // Apps Script call is best-effort; don't block user on failure
     } catch {/* offline ok */}
     localStorage.setItem('schedule', schedule);
     localStorage.setItem('apps_script_url', appsScriptUrl);
