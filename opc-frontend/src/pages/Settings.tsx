@@ -16,6 +16,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function Settings() {
+  const NOTIFY_EMAIL = 'tanhtlb23411@st.uel.edu.vn';
   const [sheetId, setSheetId] = useState(localStorage.getItem('gsheet_id') || '11ehIbSy2Aw9KPjXrN0XN90wQ5BPx613m3beZRYji7qI');
   const [apiKey] = useState(localStorage.getItem('openai_key') || '');
   const [emails, setEmails] = useState<string[]>(['tanhtlb23411@st.uel.edu.vn']);
@@ -23,6 +24,7 @@ export function Settings() {
   const [schedule, setSchedule] = useState(localStorage.getItem('schedule') || 'off');
   const [schedSaving, setSchedSaving] = useState(false);
   const [schedSaved, setSchedSaved] = useState(false);
+  const [savedSchedule, setSavedSchedule] = useState(localStorage.getItem('schedule') || 'off');
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [memoryStats, setMemoryStats] = useState<{ enabled: boolean; count: number } | null>(null);
@@ -44,17 +46,12 @@ export function Settings() {
     setSchedSaving(true);
     try {
       await axios.post(`${API_BASE}/set-schedule`, { interval: schedule });
-      localStorage.setItem('schedule', schedule);
-      setSchedSaved(true);
-      setTimeout(() => setSchedSaved(false), 3000);
-    } catch {
-      // Fallback: hiển thị hướng dẫn thủ công
-      localStorage.setItem('schedule', schedule);
-      setSchedSaved(true);
-      setTimeout(() => setSchedSaved(false), 3000);
-    } finally {
-      setSchedSaving(false);
-    }
+    } catch {/* offline ok */}
+    localStorage.setItem('schedule', schedule);
+    setSavedSchedule(schedule);
+    setSchedSaved(true);
+    setTimeout(() => setSchedSaved(false), 2000);
+    setSchedSaving(false);
   }
 
   function addEmail() {
@@ -187,19 +184,35 @@ export function Settings() {
             {schedSaving
               ? <><RefreshCw size={14} className="animate-spin" /> Đang lưu…</>
               : schedSaved
-              ? <>✅ Đã lưu lịch</>
+              ? <>✅ Đã lưu!</>
               : <><Save size={14} /> Lưu lịch</>}
           </button>
-          {schedSaved && schedule !== 'off' && (
-            <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-blue-700 space-y-1">
-              <p className="font-semibold">Bước tiếp theo — cài trigger trong Apps Script:</p>
-              <p>1. Mở Google Sheets OPC_CoreData → Extensions → Apps Script</p>
-              <p>2. Chọn hàm <code className="bg-blue-100 px-1 rounded">setupScheduledTrigger</code> → Run</p>
-              <p>Trigger sẽ tự chạy <strong>{schedule}</strong> và gửi email digest về <strong>{localStorage.getItem('notify_email') || 'email của bạn'}</strong>.</p>
+
+          {/* Luôn hiển thị khi đã lưu lịch có giá trị */}
+          {savedSchedule !== 'off' && (
+            <div className="text-xs bg-green-50 border border-green-200 rounded-lg px-4 py-3 space-y-2">
+              <p className="font-semibold text-green-800">
+                ✅ Trigger đang chạy tự động — <span className="font-bold">{
+                  savedSchedule === 'every30min' ? 'mỗi 30 phút' :
+                  savedSchedule === 'every1h'    ? 'mỗi 1 giờ' :
+                  savedSchedule === 'every2h'    ? 'mỗi 2 giờ' :
+                  savedSchedule === 'every4h'    ? 'mỗi 4 giờ' :
+                  savedSchedule === 'daily8am'   ? '8:00 sáng mỗi ngày' : savedSchedule
+                }</span>
+              </p>
+              <p className="text-green-700">
+                Hệ thống sẽ tự kiểm tra Google Sheets, phân tích hợp đồng mới và gửi email về <strong>{NOTIFY_EMAIL}</strong>.
+              </p>
+              <p className="text-green-600 border-t border-green-200 pt-2 mt-1">
+                Nếu vừa đổi lịch → vào Apps Script, chọn hàm{' '}
+                <code className="bg-green-100 px-1 rounded font-mono">setupScheduledTrigger</code> → Run một lần để áp dụng lịch mới.
+              </p>
             </div>
           )}
-          {schedSaved && schedule === 'off' && (
-            <p className="text-xs text-slate-500">Lịch tự động đã tắt. Chạy <code className="bg-slate-100 px-1 rounded">setupScheduledTrigger('off')</code> trong Apps Script để xóa trigger.</p>
+          {savedSchedule === 'off' && (
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-500">
+              Chế độ hiện tại: <strong>gửi email ngay khi có hợp đồng mới</strong> (trigger onEdit). Không có digest định kỳ.
+            </div>
           )}
         </div>
       </Section>

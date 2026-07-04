@@ -13,6 +13,13 @@ function formatVnd(v: number) {
   return v.toLocaleString('vi-VN');
 }
 
+function DecisionBadge({ action }: { action: string }) {
+  if (action === 'KY') return <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✅ Đã ký</span>;
+  if (action === 'KHONG_KY') return <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">❌ Từ chối</span>;
+  if (action === 'YEU_CAU') return <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">📋 Bổ sung</span>;
+  return null;
+}
+
 function MarginDot({ m }: { m: number }) {
   const color = m >= 0.28 ? 'bg-green-500' : m >= 0.24 ? 'bg-amber-400' : 'bg-red-500';
   return <span className={`inline-block w-2 h-2 rounded-full ${color} mr-1.5`} />;
@@ -25,12 +32,28 @@ export function Dashboard() {
 
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
+  const [decisions, setDecisions] = useState<Record<string, { action: string; timestamp: string }>>({});
+
+  const API_BASE: string = (import.meta.env.VITE_API_URL as string) ?? 'http://localhost:8000';
 
   useEffect(() => {
     getContracts()
       .then(data => setContracts(data))
       .catch(() => {})
       .finally(() => setLoadingContracts(false));
+  }, []);
+
+  // Poll founder decisions every 30s
+  useEffect(() => {
+    function fetchDecisions() {
+      fetch(`${API_BASE}/get-decisions`)
+        .then(r => r.json())
+        .then(data => setDecisions(data))
+        .catch(() => {});
+    }
+    fetchDecisions();
+    const id = setInterval(fetchDecisions, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   const totalValue = contracts.reduce((s, c) => s + c.contract_value, 0);
@@ -127,7 +150,8 @@ export function Dashboard() {
                   <th className="text-left px-5 py-3">Hợp đồng</th>
                   <th className="text-right px-5 py-3">Giá trị</th>
                   <th className="text-right px-5 py-3">Margin</th>
-                  <th className="text-center px-5 py-3">Kết quả phân tích</th>
+                  <th className="text-center px-5 py-3">Kết quả AI</th>
+                  <th className="text-center px-5 py-3">Founder</th>
                   <th className="text-center px-5 py-3"></th>
                 </tr>
               </thead>
@@ -161,6 +185,11 @@ export function Dashboard() {
                       </td>
                       <td className="px-5 py-3 text-center">
                         {rec ? <StatusBadge value={rec} /> : <span className="text-xs text-slate-300">—</span>}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        {decisions[c.contract_id]
+                          ? <DecisionBadge action={decisions[c.contract_id].action} />
+                          : <span className="text-xs text-slate-300">—</span>}
                       </td>
                       <td className="px-5 py-3 text-center">
                         <button

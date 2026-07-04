@@ -12,10 +12,11 @@
 
 // ── Cấu hình ─────────────────────────────────────────────────────────────────
 
-const RAILWAY_URL     = 'https://ocp-flowmind-production.up.railway.app';
-const CONTRACTS_SHEET = '04_CONTRACTS';
-const RESULTS_SHEET   = 'AI_RESULTS';
-const NOTIFY_EMAIL    = 'tanhtlb23411@st.uel.edu.vn';
+const RAILWAY_URL      = 'https://ocp-flowmind-production.up.railway.app';
+const CONTRACTS_SHEET  = '04_CONTRACTS';
+const RESULTS_SHEET    = 'AI_RESULTS';
+const NOTIFY_EMAIL     = 'tanhtlb23411@st.uel.edu.vn';
+const DECISION_SECRET  = 'opc-flowmind-2024';
 
 // Tên các cột bắt buộc trước khi phân tích
 const REQUIRED_FIELDS = ['contract_id', 'customer_id', 'contract_value', 'gross_margin', 'start_date', 'end_date'];
@@ -231,50 +232,90 @@ function sendSingleEmail(contractId, result) {
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active;
   const reasons    = (result?.zone_decision?.three_reasons || [])
-                     .map((r, i) => `<li>${i+1}. ${r}</li>`).join('');
+                     .map((r, i) => `<li style="margin-bottom:6px">${i+1}. ${r}</li>`).join('');
   const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : '#e67e22';
   const recLabel   = rec === 'KY' ? '✅ KÝ HỢP ĐỒNG' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : '⚠ KÝ CÓ ĐIỀU KIỆN';
+
+  // Tạo token cho từng nút quyết định
+  const tokenKy      = _makeToken(contractId, 'KY');
+  const tokenKhongKy = _makeToken(contractId, 'KHONG_KY');
+  const tokenYeuCau  = _makeToken(contractId, 'YEU_CAU');
+
+  const base = RAILWAY_URL + '/decision?contract=' + contractId;
+  const urlKy      = base + '&action=KY&token='      + tokenKy;
+  const urlKhongKy = base + '&action=KHONG_KY&token=' + tokenKhongKy;
+  const urlYeuCau  = base + '&action=YEU_CAU&token='  + tokenYeuCau;
 
   const html = `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
-    <h2 style="margin:0">🤖 OPC FlowMind — Hợp đồng mới: ${contractId}</h2>
+    <div style="font-size:12px;opacity:.7;margin-bottom:4px;letter-spacing:.5px">OPC FLOWMIND AGENTIC AI</div>
+    <h2 style="margin:0;font-size:20px">Hợp đồng mới cần xem xét: ${contractId}</h2>
   </div>
   <div style="padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px">
-    <table style="width:100%;border-collapse:collapse">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
       <tr style="background:#f5f5f5">
-        <td style="padding:10px 14px;font-weight:bold;width:140px">Khuyến nghị</td>
-        <td style="padding:10px 14px;color:${recColor};font-weight:bold;font-size:18px">${recLabel}</td>
+        <td style="padding:10px 14px;font-weight:bold;width:140px;color:#555">Khuyến nghị AI</td>
+        <td style="padding:10px 14px;color:${recColor};font-weight:bold;font-size:17px">${recLabel}</td>
       </tr>
       <tr>
-        <td style="padding:10px 14px;font-weight:bold">Độ tin cậy</td>
-        <td style="padding:10px 14px">${confidence}</td>
+        <td style="padding:10px 14px;font-weight:bold;color:#555">Độ tin cậy</td>
+        <td style="padding:10px 14px;font-weight:bold">${confidence}</td>
       </tr>
       <tr style="background:#f5f5f5">
-        <td style="padding:10px 14px;font-weight:bold">Cảnh báo rủi ro</td>
-        <td style="padding:10px 14px">${alerts} alert(s)</td>
+        <td style="padding:10px 14px;font-weight:bold;color:#555">Cảnh báo rủi ro</td>
+        <td style="padding:10px 14px">${alerts} alert${alerts !== 1 ? 's' : ''}</td>
       </tr>
       <tr>
-        <td style="padding:10px 14px;font-weight:bold">Crisis Layer</td>
+        <td style="padding:10px 14px;font-weight:bold;color:#555">Crisis Layer</td>
         <td style="padding:10px 14px">${crisis ? '⚠ Phát hiện giao dịch đáng ngờ' : '✅ Không có rủi ro'}</td>
       </tr>
     </table>
-    ${reasons ? `<div style="margin-top:16px"><strong>Lý do chính:</strong><ul style="margin-top:8px">${reasons}</ul></div>` : ''}
-    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
+
+    ${reasons ? `<div style="margin-bottom:20px;padding:16px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb"><strong style="color:#1e3a5f">Lý do chính từ AI:</strong><ul style="margin:10px 0 0;padding-left:20px;color:#374151">${reasons}</ul></div>` : ''}
+
+    <!-- Founder action buttons -->
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+      <p style="margin:0 0 14px;font-weight:bold;color:#92400e;font-size:14px">⚡ Hành động của Founder — click để xác nhận:</p>
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="padding:0 6px 0 0;width:33%">
+            <a href="${urlKy}"
+               style="display:block;background:#1e7e34;color:#fff;text-align:center;padding:12px 8px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">
+              ✅ Ký hợp đồng
+            </a>
+          </td>
+          <td style="padding:0 3px;width:33%">
+            <a href="${urlKhongKy}"
+               style="display:block;background:#c0392b;color:#fff;text-align:center;padding:12px 8px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">
+              ❌ Từ chối ký
+            </a>
+          </td>
+          <td style="padding:0 0 0 6px;width:34%">
+            <a href="${urlYeuCau}"
+               style="display:block;background:#e67e22;color:#fff;text-align:center;padding:12px 8px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px">
+              📋 Yêu cầu bổ sung
+            </a>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="padding-top:16px;border-top:1px solid #eee">
       <a href="https://ocpflowmind-ten.vercel.app/pipeline?contract=${contractId}"
-         style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
-        Xem chi tiết →
+         style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px">
+        Xem phân tích chi tiết →
       </a>
     </div>
   </div>
   <p style="color:#999;font-size:12px;margin-top:12px;text-align:center">
-    OPC FlowMind — ${new Date().toLocaleString('vi-VN')}
+    OPC FlowMind Agentic AI — ${new Date().toLocaleString('vi-VN')}
   </p>
 </div>`;
 
   MailApp.sendEmail({
     to: NOTIFY_EMAIL,
-    subject: `[OPC FlowMind] ${contractId} → ${recLabel} (${confidence})`,
+    subject: `[OPC FlowMind] ${contractId} → ${recLabel} (${confidence}) — Cần Founder xét duyệt`,
     htmlBody: html,
   });
 }
@@ -350,6 +391,13 @@ function sendDigestEmail(results, interval) {
 }
 
 // ── 9. Helpers ────────────────────────────────────────────────────────────────
+
+/** MD5 token cho decision buttons — phải khớp với _make_token() trong api.py */
+function _makeToken(contractId, action) {
+  const raw   = contractId + ':' + action + ':' + DECISION_SECRET;
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw, Utilities.Charset.UTF_8);
+  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+}
 
 function _deleteTriggersFor(fnName) {
   ScriptApp.getProjectTriggers().forEach(t => {

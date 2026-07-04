@@ -8,9 +8,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
+import hashlib
 
 from agents.crisis_layer import run_crisis_scan
 from agents.dfa import DataFinanceAgent
@@ -286,7 +288,95 @@ def memory_invalidate():
     return {"status": "cache cleared"}
 
 
+_DECISION_SECRET = "opc-flowmind-2024"
+_VALID_ACTIONS   = {"KY", "KHONG_KY", "YEU_CAU"}
 _VALID_INTERVALS = {"off", "every30min", "every1h", "every2h", "every4h", "daily8am"}
+
+
+def _make_token(contract_id: str, action: str) -> str:
+    raw = f"{contract_id}:{action}:{_DECISION_SECRET}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+@app.get("/decision", response_class=HTMLResponse)
+def founder_decision(contract: str = "", action: str = "", token: str = ""):
+    """Founder click email button → update decision → return HTML confirmation."""
+    if not contract or not action or not token:
+        return HTMLResponse(_html_error("Thiếu tham số", "Link không hợp lệ."), status_code=400)
+
+    if action not in _VALID_ACTIONS:
+        return HTMLResponse(_html_error("Hành động không hợp lệ", f"action={action} không được hỗ trợ."), status_code=400)
+
+    expected = _make_token(contract, action)
+    if token != expected:
+        return HTMLResponse(_html_error("Xác thực thất bại", "Token không đúng hoặc đã hết hạn."), status_code=403)
+
+    # Store decision in memory
+    if not hasattr(app.state, "decisions"):
+        app.state.decisions = {}
+    from datetime import datetime
+    app.state.decisions[contract] = {
+        "action": action,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    label_map = {"KY": "✅ Đã ký hợp đồng", "KHONG_KY": "❌ Từ chối ký", "YEU_CAU": "📋 Yêu cầu bổ sung thông tin"}
+    color_map = {"KY": "#1e7e34", "KHONG_KY": "#c0392b", "YEU_CAU": "#e67e22"}
+    label = label_map[action]
+    color = color_map[action]
+    pipeline_url = f"https://ocpflowmind-ten.vercel.app/pipeline?contract={contract}"
+
+    return HTMLResponse(_html_confirm(contract, label, color, pipeline_url))
+
+
+@app.get("/get-decisions")
+def get_decisions():
+    """Frontend polls to get all founder decisions."""
+    decisions = getattr(app.state, "decisions", {})
+    return decisions
+
+
+def _html_confirm(contract: str, label: str, color: str, pipeline_url: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPC FlowMind — Xác nhận</title>
+<style>
+  body{{font-family:Arial,sans-serif;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+  .card{{background:#fff;border-radius:12px;padding:40px 48px;max-width:480px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.1);text-align:center}}
+  .logo{{font-size:13px;color:#888;margin-bottom:24px;letter-spacing:.5px}}
+  .badge{{display:inline-block;font-size:22px;font-weight:bold;color:{color};background:{color}18;border:2px solid {color}40;border-radius:10px;padding:14px 28px;margin:12px 0 24px}}
+  h2{{margin:0 0 8px;color:#1e3a5f;font-size:20px}}
+  p{{color:#555;font-size:15px;line-height:1.6;margin:0 0 28px}}
+  a.btn{{display:inline-block;background:#1e3a5f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px;transition:background .2s}}
+  a.btn:hover{{background:#152d4a}}
+  .time{{color:#aaa;font-size:12px;margin-top:24px}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🤖 OPC FlowMind Agentic AI</div>
+  <h2>Quyết định đã ghi nhận</h2>
+  <div class="badge">{label}</div>
+  <p>Hợp đồng <strong>{contract}</strong> đã được cập nhật trạng thái.<br>
+     Dashboard sẽ phản ánh quyết định này ngay lập tức.</p>
+  <a href="{pipeline_url}" class="btn">Xem phân tích chi tiết →</a>
+  <div class="time">OPC FlowMind · Quyết định của Founder đã được lưu</div>
+</div>
+</body>
+</html>"""
+
+
+def _html_error(title: str, detail: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8"><title>Lỗi — OPC FlowMind</title>
+<style>body{{font-family:Arial,sans-serif;background:#fef2f2;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+.card{{background:#fff;border-radius:12px;padding:40px 48px;max-width:420px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.1);text-align:center}}
+h2{{color:#c0392b;margin:0 0 12px}}p{{color:#666;font-size:15px}}</style>
+</head>
+<body><div class="card"><h2>❌ {title}</h2><p>{detail}</p></div></body>
+</html>"""
 
 @app.post("/set-schedule")
 def set_schedule(body: dict):
