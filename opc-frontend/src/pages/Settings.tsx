@@ -200,11 +200,9 @@ export function Settings() {
               placeholder="https://script.google.com/macros/s/…/exec"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-600"
             />
-            {!appsScriptUrl && (
-              <p className="text-xs text-amber-600 mt-1">
-                Chưa có URL → Mở Apps Script → Deploy → New deployment → Web App → Copy URL dán vào đây
-              </p>
-            )}
+            <p className="text-xs text-slate-400 mt-1">
+              {appsScriptUrl ? '✓ Đã có URL — có thể cập nhật nếu cần' : 'Chưa có URL → Mở Apps Script → Deploy → Web App → Copy URL dán vào đây'}
+            </p>
           </div>
 
           <button
