@@ -27,6 +27,7 @@ export function Settings() {
   const [schedSaved, setSchedSaved] = useState(false);
   const [schedError, setSchedError] = useState('');
   const [savedSchedule, setSavedSchedule] = useState(localStorage.getItem('schedule') || 'off');
+  const [urlTestStatus, setUrlTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [memoryStats, setMemoryStats] = useState<{ enabled: boolean; count: number } | null>(null);
@@ -60,6 +61,21 @@ export function Settings() {
     setSchedSaved(true);
     setTimeout(() => setSchedSaved(false), 2000);
     setSchedSaving(false);
+  }
+
+  async function testAppsScriptUrl() {
+    if (!appsScriptUrl.startsWith('https://script.google.com/macros/s/')) {
+      setUrlTestStatus('fail');
+      setTimeout(() => setUrlTestStatus('idle'), 3000);
+      return;
+    }
+    setUrlTestStatus('testing');
+    try {
+      const res = await axios.post(`${API_BASE}/set-schedule`, { interval: 'off', apps_script_url: appsScriptUrl });
+      const s = res.data?.apps_script?.status;
+      setUrlTestStatus(s === 'ok_no_json' || s === 'ok' || res.data?.status === 'ok' ? 'ok' : 'fail');
+    } catch { setUrlTestStatus('fail'); }
+    setTimeout(() => setUrlTestStatus('idle'), 4000);
   }
 
   function addEmail() {
@@ -190,15 +206,32 @@ export function Settings() {
               Apps Script Web App URL
               <span className="ml-1.5 font-normal text-slate-400">(paste 1 lần, hệ thống tự cập nhật lịch)</span>
             </label>
-            <input
-              type="text"
-              value={appsScriptUrl}
-              onChange={e => setAppsScriptUrl(e.target.value)}
-              placeholder="https://script.google.com/macros/s/…/exec"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-600"
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              {appsScriptUrl ? '✓ Đã có URL — có thể cập nhật nếu cần' : 'Chưa có URL → Mở Apps Script → Deploy → Web App → Copy URL dán vào đây'}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={appsScriptUrl}
+                onChange={e => setAppsScriptUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/…/exec"
+                className={`flex-1 border rounded-lg px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-600 ${
+                  appsScriptUrl && !appsScriptUrl.startsWith('https://script.google.com/macros/s/')
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-slate-200'
+                }`}
+              />
+              <button
+                onClick={testAppsScriptUrl}
+                disabled={!appsScriptUrl || urlTestStatus === 'testing'}
+                className="shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40"
+              >
+                {urlTestStatus === 'testing' ? <RefreshCw size={13} className="animate-spin" /> : urlTestStatus === 'ok' ? '✅ OK' : urlTestStatus === 'fail' ? '❌ Lỗi' : 'Kiểm tra'}
+              </button>
+            </div>
+            <p className="text-xs mt-1">
+              {appsScriptUrl && !appsScriptUrl.startsWith('https://script.google.com/macros/s/')
+                ? <span className="text-red-500">⚠ URL không hợp lệ — phải bắt đầu bằng https://script.google.com/macros/s/</span>
+                : appsScriptUrl
+                ? <span className="text-slate-400">✓ Bấm "Kiểm tra" để xác nhận kết nối</span>
+                : <span className="text-amber-600">Chưa có URL → Mở Apps Script → Deploy → Web App → Copy URL dán vào đây</span>}
             </p>
           </div>
 
