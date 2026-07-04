@@ -11,20 +11,39 @@ import type { ContractDecision } from '../context/AppContext';
 
 const CONTRACTS_FALLBACK = ['CON-001', 'CON-002', 'CON-003', 'CON-004', 'CON-005'];
 
-// Render markdown-lite: **bold**, bullet lines (- …), line breaks
+const SEVERITY_BADGE: Record<string, string> = {
+  'Critical':      'bg-red-100 text-red-700 border border-red-200',
+  'High':          'bg-orange-100 text-orange-700 border border-orange-200',
+  'Medium':        'bg-yellow-100 text-yellow-700 border border-yellow-200',
+  'NGHIÊM TRỌNG':  'bg-red-100 text-red-700 border border-red-200',
+  'RỦI RO CAO':    'bg-orange-100 text-orange-700 border border-orange-200',
+  'CẦN THEO DÕI':  'bg-yellow-100 text-yellow-700 border border-yellow-200',
+  'ỔN ĐỊNH':       'bg-green-100 text-green-700 border border-green-200',
+};
+
+// Render markdown-lite: **bold**, severity badges, bullet lists, line breaks
 function renderMd(text: string, invert = false) {
   const baseText = invert ? 'text-current' : 'text-slate-700';
-  const mutedText = invert ? 'text-current opacity-80' : 'text-slate-500';
   const lines = text.split('\n').filter(l => l.trim());
 
-  function parseBold(line: string) {
+  function parseBold(line: string): React.ReactNode[] {
     const parts: React.ReactNode[] = [];
     let last = 0;
     const re = /\*\*(.+?)\*\*/g;
     let m;
     while ((m = re.exec(line)) !== null) {
       if (m.index > last) parts.push(line.slice(last, m.index));
-      parts.push(<strong key={m.index} className="font-semibold">{m[1]}</strong>);
+      // Severity badge nếu match
+      const badgeCls = SEVERITY_BADGE[m[1]];
+      if (badgeCls) {
+        parts.push(
+          <span key={m.index} className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${badgeCls}`}>
+            {m[1]}
+          </span>
+        );
+      } else {
+        parts.push(<strong key={m.index} className="font-semibold">{m[1]}</strong>);
+      }
       last = m.index + m[0].length;
     }
     if (last < line.length) parts.push(line.slice(last));
@@ -37,11 +56,11 @@ function renderMd(text: string, invert = false) {
   function flushBullets(key: number) {
     if (!bulletBuf.length) return;
     nodes.push(
-      <ul key={`ul-${key}`} className="mt-3 space-y-1 pl-4">
+      <ul key={`ul-${key}`} className="mt-3 space-y-1.5 pl-1">
         {bulletBuf.map((b, bi) => (
-          <li key={bi} className={`flex gap-2 text-sm ${baseText}`}>
-            <span className={`mt-1.5 w-1.5 h-1.5 rounded-full bg-current shrink-0 ${mutedText}`} />
-            <span>{parseBold(b)}</span>
+          <li key={bi} className={`flex gap-2.5 text-sm ${baseText}`}>
+            <span className="mt-2 w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+            <span className="leading-relaxed">{parseBold(b)}</span>
           </li>
         ))}
       </ul>
@@ -51,11 +70,13 @@ function renderMd(text: string, invert = false) {
 
   lines.forEach((line, i) => {
     if (/^[-•]\s/.test(line)) {
-      bulletBuf.push(line.replace(/^[-•]\s/, ''));
+      bulletBuf.push(line.replace(/^[-•]\s+/, ''));
     } else {
       flushBullets(i);
+      // Dòng chỉ có badge severity (VD: "**Pipeline BỊ CHẶN**...") → highlight block
+      const isBlockingLine = /pipeline.*bị chặn/i.test(line);
       nodes.push(
-        <p key={i} className={`mt-3 first:mt-0 text-sm leading-relaxed ${baseText}`}>
+        <p key={i} className={`mt-3 first:mt-0 text-sm leading-relaxed ${baseText} ${isBlockingLine ? 'font-medium' : ''}`}>
           {parseBold(line)}
         </p>
       );
