@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Node / Frontend
+opc-frontend/node_modules/
+opc-frontend/dist/
+
+# Claude Code session files
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Excel / PDF (large binary files, not needed in repo)
+*.xlsx
+*.pdf

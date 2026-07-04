@@ -1,0 +1,654 @@
+{
+  "name": "OPC FlowMind — AI Decision Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "opc-flowmind/run",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 300],
+      "webhookId": "opc-flowmind-webhook-001"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-contract-id",
+              "name": "contract_id",
+              "value": "={{ $json.body.contract_id || 'CON-004' }}",
+              "type": "string"
+            },
+            {
+              "id": "field-crisis-resolved",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $json.body.founder_crisis_resolved || false }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Set Contract Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/crisis_scan",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ contract_id: $json.contract_id }) }}"
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Crisis Layer Scan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-crisis-result",
+              "name": "crisis_result",
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "field-crisis-detected",
+              "name": "crisis_detected",
+              "value": "={{ $json.crisis_detected }}",
+              "type": "boolean"
+            },
+            {
+              "id": "field-contract-pass",
+              "name": "contract_id",
+              "value": "={{ $('Set Contract Input').item.json.contract_id }}",
+              "type": "string"
+            },
+            {
+              "id": "field-crisis-pass",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $('Set Contract Input').item.json.founder_crisis_resolved }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Store Crisis Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-crisis",
+              "leftValue": "={{ $json.crisis_detected }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Crisis Detected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-crisis-warn",
+              "name": "crisis_warning",
+              "value": "CRISIS ALERT: Suspicious transactions detected. Awaiting founder approval before pipeline continues.",
+              "type": "string"
+            },
+            {
+              "id": "field-crisis-txns",
+              "name": "crisis_txn_ids",
+              "value": "={{ $json.crisis_result.txn_ids }}",
+              "type": "object"
+            },
+            {
+              "id": "field-contract-crisis",
+              "name": "contract_id",
+              "value": "={{ $json.contract_id }}",
+              "type": "string"
+            },
+            {
+              "id": "field-crisis-pass2",
+              "name": "crisis_result",
+              "value": "={{ $json.crisis_result }}",
+              "type": "object"
+            },
+            {
+              "id": "field-crisis-resolved2",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $json.founder_crisis_resolved }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Flag Crisis Warning",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1280, 160]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-no-crisis",
+              "name": "crisis_warning",
+              "value": "No crisis detected. Pipeline running normally.",
+              "type": "string"
+            },
+            {
+              "id": "field-contract-no-crisis",
+              "name": "contract_id",
+              "value": "={{ $json.contract_id }}",
+              "type": "string"
+            },
+            {
+              "id": "field-crisis-pass3",
+              "name": "crisis_result",
+              "value": "={{ $json.crisis_result }}",
+              "type": "object"
+            },
+            {
+              "id": "field-crisis-resolved3",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $json.founder_crisis_resolved }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "No Crisis — Continue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1280, 440]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "input1"
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Merge After Crisis Check",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/dfa",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ contract_id: $json.contract_id }) }}"
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1b2c3d4-0009-0009-0009-000000000009",
+      "name": "Stage 1 — DFA Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1720, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-dfa-output",
+              "name": "financial_proposal",
+              "value": "={{ $json.output }}",
+              "type": "object"
+            },
+            {
+              "id": "field-dfa-log",
+              "name": "log_dfa",
+              "value": "={{ $json.log }}",
+              "type": "object"
+            },
+            {
+              "id": "field-crisis-pass4",
+              "name": "crisis_result",
+              "value": "={{ $('Merge After Crisis Check').item.json.crisis_result }}",
+              "type": "object"
+            },
+            {
+              "id": "field-contract-pass2",
+              "name": "contract_id",
+              "value": "={{ $('Merge After Crisis Check').item.json.contract_id }}",
+              "type": "string"
+            },
+            {
+              "id": "field-crisis-resolved4",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $('Merge After Crisis Check').item.json.founder_crisis_resolved }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "name": "Store DFA Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/rca",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ contract_id: $json.contract_id, financial_proposal: $json.financial_proposal }) }}"
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "name": "Stage 2 — RCA Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-rca-output",
+              "name": "risk_assessment",
+              "value": "={{ $json.output }}",
+              "type": "object"
+            },
+            {
+              "id": "field-rca-log",
+              "name": "log_rca",
+              "value": "={{ $json.log }}",
+              "type": "object"
+            },
+            {
+              "id": "field-pipeline-ok",
+              "name": "pipeline_should_continue",
+              "value": "={{ $json.output.pipeline_should_continue }}",
+              "type": "boolean"
+            },
+            {
+              "id": "field-fp-pass",
+              "name": "financial_proposal",
+              "value": "={{ $('Store DFA Output').item.json.financial_proposal }}",
+              "type": "object"
+            },
+            {
+              "id": "field-crisis-pass5",
+              "name": "crisis_result",
+              "value": "={{ $('Store DFA Output').item.json.crisis_result }}",
+              "type": "object"
+            },
+            {
+              "id": "field-crisis-resolved5",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $('Store DFA Output').item.json.founder_crisis_resolved }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-0012-0012-000000000012",
+      "name": "Store RCA Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2380, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-pipeline",
+              "leftValue": "={{ $json.pipeline_should_continue }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0013-0013-0013-000000000013",
+      "name": "Pipeline Blocked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2600, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-blocked-status",
+              "name": "pipeline_status",
+              "value": "BLOCKED — Critical risk alerts require founder action before proceeding",
+              "type": "string"
+            },
+            {
+              "id": "field-blocked-reason",
+              "name": "blocked_reason",
+              "value": "={{ $json.risk_assessment.blocked_by }}",
+              "type": "string"
+            },
+            {
+              "id": "field-carry-fp2",
+              "name": "financial_proposal",
+              "value": "={{ $json.financial_proposal }}",
+              "type": "object"
+            },
+            {
+              "id": "field-carry-risk2",
+              "name": "risk_assessment",
+              "value": "={{ $json.risk_assessment }}",
+              "type": "object"
+            },
+            {
+              "id": "field-carry-crisis2",
+              "name": "crisis_result",
+              "value": "={{ $json.crisis_result }}",
+              "type": "object"
+            },
+            {
+              "id": "field-carry-crisis-resolved2",
+              "name": "founder_crisis_resolved",
+              "value": "={{ $json.founder_crisis_resolved }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0014-0014-0014-000000000014",
+      "name": "Mark Pipeline Blocked",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2820, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/dpa",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ financial_proposal: $json.financial_proposal, risk_assessment: $json.risk_assessment, crisis_resolved: $json.founder_crisis_resolved }) }}"
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1b2c3d4-0015-0015-0015-000000000015",
+      "name": "Stage 3 — DPA Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2820, 440]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "input2"
+      },
+      "id": "a1b2c3d4-0016-0016-0016-000000000016",
+      "name": "Merge After DPA",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3060, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-decision-card",
+              "name": "decision_card",
+              "value": "={{ $json.output || null }}",
+              "type": "object"
+            },
+            {
+              "id": "field-log-dpa",
+              "name": "log_dpa",
+              "value": "={{ $json.log || null }}",
+              "type": "object"
+            },
+            {
+              "id": "field-carry-fp3",
+              "name": "financial_proposal",
+              "value": "={{ $('Store RCA Output').item.json.financial_proposal }}",
+              "type": "object"
+            },
+            {
+              "id": "field-carry-risk3",
+              "name": "risk_assessment",
+              "value": "={{ $('Store RCA Output').item.json.risk_assessment }}",
+              "type": "object"
+            },
+            {
+              "id": "field-carry-crisis3",
+              "name": "crisis_result",
+              "value": "={{ $('Store RCA Output').item.json.crisis_result }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0017-0017-0017-000000000017",
+      "name": "Store DPA Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [3280, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/build_output",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ crisis_result: $json.crisis_result, financial_proposal: $json.financial_proposal, risk_assessment: $json.risk_assessment, decision_card: $json.decision_card }) }}"
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a1b2c3d4-0018-0018-0018-000000000018",
+      "name": "Build Final Output",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3500, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "a1b2c3d4-0019-0019-0019-000000000019",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3720, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [{ "node": "Set Contract Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Contract Input": {
+      "main": [
+        [{ "node": "Crisis Layer Scan", "type": "main", "index": 0 }]
+      ]
+    },
+    "Crisis Layer Scan": {
+      "main": [
+        [{ "node": "Store Crisis Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store Crisis Result": {
+      "main": [
+        [{ "node": "Crisis Detected?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Crisis Detected?": {
+      "main": [
+        [{ "node": "Flag Crisis Warning",   "type": "main", "index": 0 }],
+        [{ "node": "No Crisis — Continue",  "type": "main", "index": 0 }]
+      ]
+    },
+    "Flag Crisis Warning": {
+      "main": [
+        [{ "node": "Merge After Crisis Check", "type": "main", "index": 0 }]
+      ]
+    },
+    "No Crisis — Continue": {
+      "main": [
+        [{ "node": "Merge After Crisis Check", "type": "main", "index": 1 }]
+      ]
+    },
+    "Merge After Crisis Check": {
+      "main": [
+        [{ "node": "Stage 1 — DFA Agent", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stage 1 — DFA Agent": {
+      "main": [
+        [{ "node": "Store DFA Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store DFA Output": {
+      "main": [
+        [{ "node": "Stage 2 — RCA Agent", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stage 2 — RCA Agent": {
+      "main": [
+        [{ "node": "Store RCA Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store RCA Output": {
+      "main": [
+        [{ "node": "Pipeline Blocked?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pipeline Blocked?": {
+      "main": [
+        [{ "node": "Mark Pipeline Blocked", "type": "main", "index": 0 }],
+        [{ "node": "Stage 3 — DPA Agent",   "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Pipeline Blocked": {
+      "main": [
+        [{ "node": "Merge After DPA", "type": "main", "index": 0 }]
+      ]
+    },
+    "Stage 3 — DPA Agent": {
+      "main": [
+        [{ "node": "Merge After DPA", "type": "main", "index": 1 }]
+      ]
+    },
+    "Merge After DPA": {
+      "main": [
+        [{ "node": "Store DPA Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store DPA Output": {
+      "main": [
+        [{ "node": "Build Final Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Final Output": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "opc-flowmind-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "opc-flowmind-local"
+  },
+  "id": "OPCFlowMind001",
+  "tags": [
+    { "createdAt": "2026-06-30T00:00:00.000Z", "updatedAt": "2026-06-30T00:00:00.000Z", "id": "tag-opc-001", "name": "MIS Talent 2026" },
+    { "createdAt": "2026-06-30T00:00:00.000Z", "updatedAt": "2026-06-30T00:00:00.000Z", "id": "tag-opc-002", "name": "AI Agent" }
+  ]
+}
