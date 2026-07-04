@@ -274,11 +274,11 @@ function ConfirmSignModal({ contractId, decision, resolvedCount, totalChecklist,
           </div>
 
           {/* Reasons */}
-          {decision.reasons && decision.reasons.length > 0 && (
+          {decision.three_reasons && decision.three_reasons.length > 0 && (
             <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
               <div className="text-xs font-semibold text-green-700 mb-2">Lý do AI đề xuất ký:</div>
               <ul className="space-y-1">
-                {decision.reasons.map((r, i) => (
+                {decision.three_reasons.map((r: string, i: number) => (
                   <li key={i} className="text-sm text-green-800 flex gap-2">
                     <span className="text-green-500 shrink-0">✓</span> {r}
                   </li>

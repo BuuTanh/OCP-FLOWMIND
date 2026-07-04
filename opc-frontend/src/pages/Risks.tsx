@@ -299,7 +299,7 @@ export function Risks() {
             <p className="text-xs text-slate-400 mt-0.5">Click để xem danh sách alerts của từng HĐ</p>
           </div>
           <div className="divide-y divide-slate-100">
-            {perContract.map(({ cid, rec, critical, high, medium, total }) => (
+            {perContract.map(({ cid, critical, high, medium, total }) => (
               <div key={cid}>
                 <button
                   onClick={() => setExpandedContract(expandedContract === cid ? null : cid)}

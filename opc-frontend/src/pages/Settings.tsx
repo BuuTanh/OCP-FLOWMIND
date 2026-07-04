@@ -17,7 +17,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function Settings() {
   const [sheetId, setSheetId] = useState(localStorage.getItem('gsheet_id') || '16991q6bJPKLRt8_8aI29m7CTfpepHqQF');
-  const [apiKey, setApiKey] = useState(localStorage.getItem('openai_key') || '');
+  const [apiKey] = useState(localStorage.getItem('openai_key') || '');
   const [emails, setEmails] = useState<string[]>(['tanhtlb23411@st.uel.edu.vn']);
   const [newEmail, setNewEmail] = useState('');
   const [schedule, setSchedule] = useState(localStorage.getItem('schedule') || 'off');
