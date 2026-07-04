@@ -34,6 +34,7 @@ class DecisionPartnerAgent(BaseAgent):
         cus_id = target_contract.get("customer_id", "")
         target_customer = next((c for c in customers if c["customer_id"] == cus_id), {})
         customer_type = target_customer.get("customer_type", "")
+        payment_reliability = float(str(target_customer.get("payment_reliability", 0.65)).replace(",", "."))
 
         # Lọc credit profiles phù hợp với hợp đồng đang phân tích:
         # - CR có đề cập contract_id cụ thể → chỉ dùng khi đúng contract
@@ -47,6 +48,31 @@ class DecisionPartnerAgent(BaseAgent):
 
         bank_options: list[BankOption] = []
         blocked_cases: list[str] = []
+
+        payment_terms_lower = target_contract.get("payment_terms", "").lower()
+
+        # Nếu không có CR nào match payment_terms, tạo synthetic CR từ contract data
+        cr_types_available = [cr.get("request_type", "").lower() for cr in relevant_credit_profiles]
+        if "performance bond" in payment_terms_lower and not any("performance bond" in t for t in cr_types_available):
+            relevant_credit_profiles = list(relevant_credit_profiles) + [{
+                "credit_case_id": f"CR-INF-{contract_id}-BOND",
+                "request_type": "Performance bond",
+                "requested_amount": float(target_contract.get("contract_value", 0)) * 0.1,
+                "collateral_or_basis": f"Contract {contract_id}",
+                "eligibility_score": payment_reliability,
+                "precheck_note": "Inferred from payment_terms",
+                "approval_status": "Human approval required",
+            }]
+        elif any(k in payment_terms_lower for k in ["lc", "trade finance"]) and not any("trade finance" in t for t in cr_types_available):
+            relevant_credit_profiles = list(relevant_credit_profiles) + [{
+                "credit_case_id": f"CR-INF-{contract_id}-LC",
+                "request_type": "Trade finance/LC support",
+                "requested_amount": float(target_contract.get("contract_value", 0)) * 0.35,
+                "collateral_or_basis": f"{contract_id} documentation",
+                "eligibility_score": payment_reliability * 0.9,
+                "precheck_note": "Inferred from payment_terms — supplier docs required",
+                "approval_status": "Review",
+            }]
 
         for cr in relevant_credit_profiles:
             doc_complete = "Missing" not in cr.get("precheck_note", "")
@@ -86,10 +112,13 @@ class DecisionPartnerAgent(BaseAgent):
                     requires_human_approval=True
                 ))
 
-        base_confidence = (
+        cr_base = (
             round(sum(o.eligibility_score for o in bank_options) / len(bank_options), 2)
             if bank_options else 0.45
         )
+        # Blend credit score (60%) với customer payment_reliability (40%) → confidence per-contract
+        base_confidence = round(cr_base * 0.6 + payment_reliability * 0.4, 2)
+
         # Điều chỉnh confidence dựa trên trạng thái xử lý rủi ro hiện tại
         unresolved_critical = sum(
             1 for a in risk.alerts
@@ -163,14 +192,26 @@ class DecisionPartnerAgent(BaseAgent):
                 f"[ ] Founder xác nhận xử lý {txn_id} (RR-001 + API-H-003)"
             )
 
-        # Từ credit cases vượt threshold 300M (chỉ các CR liên quan hợp đồng này)
+        # Từ credit cases vượt threshold 300M — chỉ thêm vào checklist khi thực sự cần
+        has_funding_need = financial.total_funding_gap_3m > 0
+        payment_terms = target_contract.get("payment_terms", "").lower()
         for cr in relevant_credit_profiles:
             amount = float(cr.get("requested_amount", 0))
             if amount > 300_000_000:
-                approval_checklist.append(
-                    f"[ ] Founder ký duyệt {cr['credit_case_id']} "
-                    f"({amount/1e6:.0f}M > 300M, RR-005) — {cr.get('request_type','')}"
+                cr_linked = bool(re.findall(r'CON-\d+', cr.get("collateral_or_basis", "")))
+                req_type = cr.get("request_type", "").lower()
+                # Chỉ include nếu: CR gắn trực tiếp với contract này, hoặc có funding gap thực sự,
+                # hoặc payment_terms của contract khớp với loại tín dụng cần
+                terms_match = (
+                    ("performance bond" in req_type and "performance bond" in payment_terms)
+                    or ("trade finance" in req_type and ("lc" in payment_terms or "trade finance" in payment_terms))
+                    or ("working capital" in req_type and has_funding_need)
                 )
+                if cr_linked or terms_match:
+                    approval_checklist.append(
+                        f"[ ] Founder ký duyệt {cr['credit_case_id']} "
+                        f"({amount/1e6:.0f}M > 300M, RR-005) — {cr.get('request_type','')}"
+                    )
 
         # Từ credit cases thiếu chứng từ (chỉ các CR liên quan hợp đồng này)
         for cr in relevant_credit_profiles:

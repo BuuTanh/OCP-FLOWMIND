@@ -106,6 +106,17 @@ class DataFinanceAgent(BaseAgent):
         if not check["ok"]:
             narrative += f"\n[SYSTEM WARNING: back-check flags: {check['flags']}]"
 
+        # data_confidence động dựa trên mức độ đầy đủ dữ liệu thực tế
+        has_contract_data = bool(target_contract)
+        has_cashflow_data = len(monthly_gaps) > 0
+        has_invoice_data  = (receivable_open + receivable_pipeline) > 0
+        if has_contract_data and has_cashflow_data and has_invoice_data:
+            data_confidence_val = "Verified"
+        elif has_contract_data and has_cashflow_data:
+            data_confidence_val = "Partial"
+        else:
+            data_confidence_val = "Estimated"
+
         result = FinancialProposal(
             target_contract_id=contract_id,
             gross_margin_actual=gross_margin,
@@ -118,7 +129,7 @@ class DataFinanceAgent(BaseAgent):
             suspicious_txn_ids=suspicious_txns,
             missing_data_fields=[],
             narrative=narrative,
-            data_confidence="Verified"
+            data_confidence=data_confidence_val
         )
 
         agent_log = self.log(
