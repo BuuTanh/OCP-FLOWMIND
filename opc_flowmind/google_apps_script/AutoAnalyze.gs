@@ -34,19 +34,40 @@ function setupTrigger() {
 
 // ── Handler chính ─────────────────────────────────────────────────────────────
 
+// Tên các cột bắt buộc phải có giá trị trước khi trigger phân tích
+const REQUIRED_FIELDS = ['contract_id', 'customer_id', 'contract_value', 'gross_margin', 'start_date', 'end_date'];
+
 function onSheetEdit(e) {
-  // Chỉ xử lý khi sửa sheet hợp đồng
   if (!e || !e.range) return;
   const sheet = e.range.getSheet();
   if (sheet.getName() !== CONTRACTS_SHEET) return;
 
-  const row  = e.range.getRow();
-  const col  = e.range.getColumn();
+  const row = e.range.getRow();
   if (row <= 1) return;  // bỏ qua header
 
-  // Chỉ trigger khi cột A (contract_id) vừa được điền
-  if (col !== 1) return;
-  const contractId = String(e.value || '').trim();
+  // Lấy header row để tìm index cột
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+                       .map(h => String(h).trim().toLowerCase());
+
+  // Lấy toàn bộ dữ liệu hàng vừa sửa
+  const rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  // Kiểm tra tất cả field bắt buộc đều có giá trị
+  const missing = REQUIRED_FIELDS.filter(field => {
+    const idx = headers.indexOf(field.toLowerCase());
+    if (idx < 0) return true;  // không tìm thấy cột → thiếu
+    const val = String(rowData[idx] || '').trim();
+    return val === '' || val === '0';
+  });
+
+  if (missing.length > 0) {
+    Logger.log('⏳ Hàng ' + row + ' chưa đủ dữ liệu — còn thiếu: ' + missing.join(', '));
+    return;
+  }
+
+  // Lấy contract_id
+  const cidIdx = headers.indexOf('contract_id');
+  const contractId = String(rowData[cidIdx] || '').trim();
   if (!contractId) return;
 
   // Tránh phân tích trùng nếu đã có kết quả
@@ -55,7 +76,7 @@ function onSheetEdit(e) {
     return;
   }
 
-  Logger.log('🚀 Bắt đầu phân tích ' + contractId);
+  Logger.log('🚀 Tất cả field đủ — bắt đầu phân tích ' + contractId);
   runAnalysis(contractId);
 }
 
