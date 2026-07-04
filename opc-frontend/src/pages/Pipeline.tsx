@@ -1035,8 +1035,8 @@ export function Pipeline() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Reasons — expandable */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            {/* Reasons */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-800 mb-3">Lý do chính ({(decision.three_reasons || []).length})</h3>
               <ol className="space-y-3">
@@ -1049,9 +1049,9 @@ export function Pipeline() {
               </ol>
             </div>
 
-            {/* Alerts */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">
+            {/* Alerts — flex column, tự stretch theo chiều cao cột trái */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3 shrink-0">
                 Cảnh báo rủi ro ({(decision.risk_alerts || []).length})
                 {resolvedIds.size > 0 && (
                   <span className="ml-2 text-xs text-green-600 font-normal">
@@ -1059,7 +1059,7 @@ export function Pipeline() {
                   </span>
                 )}
               </h3>
-              <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
+              <div className="space-y-1.5 overflow-y-auto pr-1 flex-1">
                 {(decision.risk_alerts || []).map(a => (
                   <div key={a.alert_id} className={`flex items-start gap-2 text-xs text-slate-600 rounded px-1 py-0.5 ${resolvedIds.has(a.related_record) || resolvedIds.has(a.alert_id) ? 'opacity-40 line-through' : ''}`}>
                     <StatusBadge value={a.severity} size="sm" className="shrink-0 mt-0.5" />
