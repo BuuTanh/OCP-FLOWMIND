@@ -190,9 +190,10 @@ export function Settings() {
 
           {/* Luôn hiển thị khi đã lưu lịch có giá trị */}
           {savedSchedule !== 'off' && (
-            <div className="text-xs bg-green-50 border border-green-200 rounded-lg px-4 py-3 space-y-2">
+            <div className="text-xs bg-green-50 border border-green-200 rounded-lg px-4 py-3 space-y-1.5">
               <p className="font-semibold text-green-800">
-                ✅ Trigger đang chạy tự động — <span className="font-bold">{
+                ✅ Hệ thống đang tự động phân tích{' '}
+                <span className="font-bold">{
                   savedSchedule === 'every30min' ? 'mỗi 30 phút' :
                   savedSchedule === 'every1h'    ? 'mỗi 1 giờ' :
                   savedSchedule === 'every2h'    ? 'mỗi 2 giờ' :
@@ -201,17 +202,13 @@ export function Settings() {
                 }</span>
               </p>
               <p className="text-green-700">
-                Hệ thống sẽ tự kiểm tra Google Sheets, phân tích hợp đồng mới và gửi email về <strong>{NOTIFY_EMAIL}</strong>.
-              </p>
-              <p className="text-green-600 border-t border-green-200 pt-2 mt-1">
-                Nếu vừa đổi lịch → vào Apps Script, chọn hàm{' '}
-                <code className="bg-green-100 px-1 rounded font-mono">setupScheduledTrigger</code> → Run một lần để áp dụng lịch mới.
+                Kết quả phân tích và cảnh báo rủi ro sẽ được gửi về <strong>{NOTIFY_EMAIL}</strong>.
               </p>
             </div>
           )}
           {savedSchedule === 'off' && (
-            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-500">
-              Chế độ hiện tại: <strong>gửi email ngay khi có hợp đồng mới</strong> (trigger onEdit). Không có digest định kỳ.
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-600">
+              ✅ Hệ thống sẽ phân tích và gửi thông báo ngay khi có hợp đồng mới.
             </div>
           )}
         </div>
