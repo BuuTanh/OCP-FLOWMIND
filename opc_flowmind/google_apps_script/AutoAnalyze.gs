@@ -129,7 +129,15 @@ function onSheetEdit(e) {
       const result = runAnalysis(contractId);
       if (result) {
         writeResult(contractId, result); // ghi sheet TRƯỚC để tránh duplicate
-        sendSingleEmail(contractId, result);
+
+        // Chỉ gửi email ngay nếu đang ở chế độ tắt lịch (interval = 'off')
+        // Nếu có lịch (30 phút, 1 giờ...) thì để runScheduled gửi digest
+        const currentInterval = _getCurrentInterval();
+        if (currentInterval === 'off') {
+          sendSingleEmail(contractId, result);
+        } else {
+          Logger.log('⏳ ' + contractId + ' đã phân tích, chờ runScheduled gửi digest (' + currentInterval + ')');
+        }
       }
     } finally {
       lock.releaseLock();
@@ -439,6 +447,18 @@ function _makeToken(contractId, action) {
   const raw   = contractId + ':' + action + ':' + DECISION_SECRET;
   const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw, Utilities.Charset.UTF_8);
   return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+}
+
+// Đọc interval hiện tại từ Railway, fallback PropertiesService
+function _getCurrentInterval() {
+  try {
+    const r = UrlFetchApp.fetch(RAILWAY_URL + '/get-schedule', { muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) {
+      const data = JSON.parse(r.getContentText());
+      if (data && data.interval) return data.interval;
+    }
+  } catch (e) { /* ignore */ }
+  return PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'off';
 }
 
 function _deleteTriggersFor(fnName) {
