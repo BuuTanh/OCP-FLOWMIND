@@ -30,10 +30,10 @@ PIPELINE CHƯA XUẤT: {receivables_pipeline_band}
 
 GIAO DỊCH ĐÁNG NGỜ: {suspicious_txns}
 
-Hãy viết:
-1. Đoạn 1: Tình trạng dòng tiền — tháng nào vi phạm ngưỡng 550M, số tiền chênh lệch bao nhiêu
-2. Đoạn 2: Tác động khi nhận {contract_id} — nếu ký, dòng tiền sẽ thay đổi thế nào (cụ thể theo tháng)
-3. Dòng cuối: Đánh giá tổng thể [NGHIÊM TRỌNG / RỦI RO CAO / CẦN THEO DÕI / ỔN ĐỊNH]
+Hãy viết liền mạch (không đánh số đoạn, không dùng tiêu đề "Đoạn 1/2"):
+- Tình trạng dòng tiền: tháng nào vi phạm ngưỡng 550M, số tiền chênh lệch bao nhiêu
+- Tác động khi nhận {contract_id}: nếu ký, dòng tiền sẽ thay đổi thế nào (cụ thể theo tháng)
+- Câu cuối: đánh giá tổng thể [NGHIÊM TRỌNG / RỦI RO CAO / CẦN THEO DÕI / ỔN ĐỊNH]
 """
 
 RCA_SYSTEM = """
@@ -73,10 +73,10 @@ HỢP ĐỒNG MỤC TIÊU: {contract_id}
 - Cần performance bond: {needs_bond}
 - Tình trạng chứng từ: {doc_status}
 
-Hãy viết theo cấu trúc:
-1. CRITICAL RISKS: liệt kê và giải thích từng rủi ro Critical (nếu có), nêu số tiền/điểm vi phạm
-2. HIGH RISKS: tương tự cho High
-3. KẾT LUẬN: pipeline có thể tiếp tục không, điều kiện tiên quyết là gì
+Hãy viết liền mạch, không dùng tiêu đề "CRITICAL RISKS / HIGH RISKS":
+- Nêu rõ từng rủi ro Critical trước (nếu có) kèm số tiền/điểm vi phạm cụ thể
+- Tiếp theo các rủi ro High quan trọng nhất
+- Câu cuối: pipeline có tiếp tục được không và điều kiện tiên quyết là gì
 """
 
 DPA_SYSTEM = """
