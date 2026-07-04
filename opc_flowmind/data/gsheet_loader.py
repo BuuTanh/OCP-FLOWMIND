@@ -3,9 +3,9 @@ Google Sheets loader — đọc public sheets qua CSV export URL.
 Không cần service account, chỉ cần sheet được share "Anyone with link".
 
 Sheet IDs:
-  OPC_CoreData:     16991q6bJPKLRt8_8aI29m7CTfpepHqQF
-  OPC_FinancialData: 1Z2YsFXamos8IYVD6sFGuND5dXy96bPAc
-  OPC_RulesRAG:     1U3uMdlz0vdysokFVknU9VRE-DtapFfq-
+  OPC_CoreData:     11ehIbSy2Aw9KPjXrN0XN90wQ5BPx613m3beZRYji7qI
+  OPC_FinancialData: 1p5A4AP1OMx0xonZXUqVFqphgm6yKgCP79v33vzflXBo
+  OPC_RulesRAG:     1C-WNOIB00GPKmc17obCRbhoi0oVy83IJ2UEt2CF077w
 """
 
 import pandas as pd
@@ -16,9 +16,9 @@ from typing import Optional
 
 # ── Sheet IDs ────────────────────────────────────────────────────────────
 SHEET_IDS = {
-    "core":      "16991q6bJPKLRt8_8aI29m7CTfpepHqQF",
-    "financial": "1Z2YsFXamos8IYVD6sFGuND5dXy96bPAc",
-    "rules":     "1U3uMdlz0vdysokFVknU9VRE-DtapFfq-",
+    "core":      "11ehIbSy2Aw9KPjXrN0XN90wQ5BPx613m3beZRYji7qI",
+    "financial": "1p5A4AP1OMx0xonZXUqVFqphgm6yKgCP79v33vzflXBo",
+    "rules":     "1C-WNOIB00GPKmc17obCRbhoi0oVy83IJ2UEt2CF077w",
 }
 
 # Tab names → sheet group mapping

@@ -16,7 +16,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function Settings() {
-  const [sheetId, setSheetId] = useState(localStorage.getItem('gsheet_id') || '16991q6bJPKLRt8_8aI29m7CTfpepHqQF');
+  const [sheetId, setSheetId] = useState(localStorage.getItem('gsheet_id') || '11ehIbSy2Aw9KPjXrN0XN90wQ5BPx613m3beZRYji7qI');
   const [apiKey] = useState(localStorage.getItem('openai_key') || '');
   const [emails, setEmails] = useState<string[]>(['tanhtlb23411@st.uel.edu.vn']);
   const [newEmail, setNewEmail] = useState('');
@@ -183,9 +183,9 @@ export function Settings() {
             <div className="text-xs font-semibold text-slate-600 mb-1">Google Sheets IDs (đã cấu hình)</div>
             <div className="space-y-1">
               {[
-                { name: 'OPC_CoreData', id: '16991q6bJPKLRt8_8aI29m7CTfpepHqQF' },
-                { name: 'OPC_FinancialData', id: '1Z2YsFXamos8IYVD6sFGuND5dXy96bPAc' },
-                { name: 'OPC_RulesRAG', id: '1U3uMdlz0vdysokFVknU9VRE-DtapFfq-' },
+                { name: 'OPC_CoreData', id: '11ehIbSy2Aw9KPjXrN0XN90wQ5BPx613m3beZRYji7qI' },
+                { name: 'OPC_FinancialData', id: '1p5A4AP1OMx0xonZXUqVFqphgm6yKgCP79v33vzflXBo' },
+                { name: 'OPC_RulesRAG', id: '1C-WNOIB00GPKmc17obCRbhoi0oVy83IJ2UEt2CF077w' },
               ].map(s => (
                 <div key={s.name} className="flex items-center gap-2 text-xs">
                   <span className="text-green-500">✓</span>
