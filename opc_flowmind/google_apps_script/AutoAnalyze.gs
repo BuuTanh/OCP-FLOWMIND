@@ -125,6 +125,7 @@ function onSheetEdit(e) {
         Logger.log('⏭ ' + contractId + ' đã được xử lý bởi thread khác.');
         continue;
       }
+      markAnalyzed(contractId); // đánh dấu ngay để block mọi execution sau
       Logger.log('🚀 Thêm mới → phân tích ' + contractId);
       const result = runAnalysis(contractId);
       if (result) {
@@ -415,11 +416,20 @@ function sendDigestEmail(results, interval) {
 
 /** Kiểm tra contract đã có trong AI_RESULTS sheet chưa */
 function alreadyAnalyzed(contractId) {
+  // Kiểm tra PropertiesService trước (nhanh, tránh duplicate trong cùng session)
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('analyzed_' + contractId) === '1') return true;
+
+  // Kiểm tra sheet AI_RESULTS
   const ss    = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(RESULTS_SHEET);
   if (!sheet || sheet.getLastRow() <= 1) return false;
   const data = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getValues();
   return data.some(function(row) { return String(row[0]).trim() === contractId; });
+}
+
+function markAnalyzed(contractId) {
+  PropertiesService.getScriptProperties().setProperty('analyzed_' + contractId, '1');
 }
 
 /** MD5 token cho decision buttons — phải khớp với _make_token() trong api.py */
