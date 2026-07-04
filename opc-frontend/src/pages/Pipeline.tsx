@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useLocation } from 'react-router-dom';
 import { Play, CheckCircle, AlertTriangle, Loader, ChevronDown, ChevronUp,
          XCircle, Clock, FileCheck, Banknote, X, ArrowRight, User, Target, Database, History,
@@ -481,7 +482,9 @@ function StepCard({ step, expanded, onToggle }: { step: { agent: string; status:
       </button>
       {expanded && (
         <div className="px-5 py-4 text-sm text-slate-600 bg-white whitespace-pre-line leading-relaxed">
-          {step.summary || 'Không có thông tin chi tiết.'}
+          <ReactMarkdown className="prose prose-sm max-w-none prose-p:my-1 prose-strong:text-slate-800 prose-ul:my-1 prose-li:my-0.5">
+            {step.summary || 'Không có thông tin chi tiết.'}
+          </ReactMarkdown>
         </div>
       )}
     </div>
@@ -954,7 +957,11 @@ export function Pipeline() {
             <div className="text-xl font-bold">{REC_LABELS[rec]}</div>
             <div className="text-sm mt-1 opacity-80">Confidence: {(decision.confidence_score * 100).toFixed(0)}%</div>
             {decision.narrative && (
-              <p className="text-sm mt-3 leading-relaxed opacity-90 border-t border-current/20 pt-3">{decision.narrative}</p>
+              <div className="text-sm mt-3 leading-relaxed opacity-90 border-t border-current/20 pt-3">
+                <ReactMarkdown className="prose prose-sm max-w-none prose-p:my-1 prose-strong:font-bold prose-ul:my-1 prose-li:my-0.5 [&_*]:text-inherit">
+                  {decision.narrative}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
 
