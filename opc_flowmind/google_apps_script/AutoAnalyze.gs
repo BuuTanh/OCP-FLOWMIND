@@ -116,9 +116,24 @@ function onSheetEdit(e) {
       continue;
     }
 
-    Logger.log('🚀 Thêm mới → phân tích ' + contractId);
-    const result = runAnalysis(contractId);
-    if (result) sendSingleEmail(contractId, result);
+    // Dùng lock để tránh onEdit + runScheduled gửi email trùng nhau
+    const lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(10000);
+      // Kiểm tra lại sau khi có lock (có thể thread khác đã xử lý)
+      if (alreadyAnalyzed(contractId)) {
+        Logger.log('⏭ ' + contractId + ' đã được xử lý bởi thread khác.');
+        continue;
+      }
+      Logger.log('🚀 Thêm mới → phân tích ' + contractId);
+      const result = runAnalysis(contractId);
+      if (result) {
+        writeResult(contractId, result); // ghi sheet TRƯỚC để tránh duplicate
+        sendSingleEmail(contractId, result);
+      }
+    } finally {
+      lock.releaseLock();
+    }
   }
 }
 
@@ -248,8 +263,9 @@ function sendSingleEmail(contractId, result) {
                      ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%' : '—';
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active;
+  const mdToHtml = s => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
   const reasons    = (result?.zone_decision?.three_reasons || [])
-                     .map((r, i) => `<li style="margin-bottom:6px">${i+1}. ${r}</li>`).join('');
+                     .map((r, i) => `<li style="margin-bottom:6px">${i+1}. ${mdToHtml(r)}</li>`).join('');
   const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : '#e67e22';
   const recLabel   = rec === 'KY' ? '✅ KÝ HỢP ĐỒNG' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : '⚠ KÝ CÓ ĐIỀU KIỆN';
 
