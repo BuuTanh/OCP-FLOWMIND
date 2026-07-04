@@ -432,6 +432,14 @@ def set_schedule(body: dict):
     }
 
 
+@app.post("/reset-memory")
+def reset_memory():
+    """Xóa decisions + web_analyzed trong Railway memory để test lại."""
+    app.state.decisions = {}
+    app.state.web_analyzed = {}
+    return {"status": "ok", "message": "Đã reset decisions và web_analyzed"}
+
+
 @app.get("/get-schedule")
 def get_schedule():
     """Apps Script gọi để lấy interval hiện tại."""

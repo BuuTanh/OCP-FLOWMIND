@@ -96,6 +96,19 @@ export function Settings() {
     setTimeout(() => setTestStatus('idle'), 3000);
   }
 
+  const [resetting, setResetting] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+
+  async function resetMemory() {
+    setResetting(true);
+    try {
+      await axios.post(`${API_BASE}/reset-memory`);
+      setResetDone(true);
+      setTimeout(() => setResetDone(false), 3000);
+    } catch {/* offline */}
+    setResetting(false);
+  }
+
   async function clearCache() {
     setClearing(true);
     try {
@@ -325,6 +338,19 @@ export function Settings() {
             {clearing ? 'Đang reload…' : 'Reload cache'}
           </button>
         </div>
+      </Section>
+
+      {/* Reset for testing */}
+      <Section title="Reset để test">
+        <p className="text-xs text-slate-500">Xóa lịch sử quyết định Founder + danh sách đã phân tích trên Railway. RAG memory giữ nguyên.</p>
+        <button
+          onClick={resetMemory}
+          disabled={resetting}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white disabled:opacity-60 transition-colors"
+        >
+          <RefreshCw size={14} className={resetting ? 'animate-spin' : ''} />
+          {resetting ? 'Đang reset…' : resetDone ? '✅ Đã reset!' : 'Reset Railway memory'}
+        </button>
       </Section>
 
       {/* Save button */}
