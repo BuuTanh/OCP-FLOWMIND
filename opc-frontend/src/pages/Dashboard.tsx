@@ -20,7 +20,7 @@ function MarginDot({ m }: { m: number }) {
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { lastResult, analysisHistory, setSelectedContract, crisisResolved, runLog } = useApp();
+  const { lastResult, analysisHistory, setSelectedContract, setLastResult, crisisResolved, runLog } = useApp();
   const { getContracts } = useApi();
 
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -136,7 +136,16 @@ export function Dashboard() {
                   const result = analysisHistory[c.contract_id];
                   const rec = result?.zone_decision.recommendation as Recommendation | undefined;
                   return (
-                    <tr key={c.contract_id} className="hover:bg-slate-50 text-sm">
+                    <tr
+                      key={c.contract_id}
+                      className="hover:bg-slate-50 text-sm cursor-pointer"
+                      onClick={() => {
+                        setSelectedContract(c.contract_id);
+                        const hist = analysisHistory[c.contract_id];
+                        if (hist) setLastResult(hist);
+                        navigate('/pipeline');
+                      }}
+                    >
                       <td className="px-5 py-3">
                         <div className="font-medium text-slate-800">{c.contract_id}</div>
                         <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[180px]">{c.description}</div>
@@ -155,7 +164,7 @@ export function Dashboard() {
                       </td>
                       <td className="px-5 py-3 text-center">
                         <button
-                          onClick={() => { setSelectedContract(c.contract_id); navigate('/pipeline'); }}
+                          onClick={e => { e.stopPropagation(); setSelectedContract(c.contract_id); setLastResult(null); navigate('/pipeline'); }}
                           className="text-xs text-brand-600 hover:text-brand-800 font-medium"
                         >
                           Phân tích
