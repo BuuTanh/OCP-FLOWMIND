@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Plus, X, TestTube, Brain, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL || 'http://localhost:8000';
+const API_BASE: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
