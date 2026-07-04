@@ -144,8 +144,8 @@ function writeResult(contractId, result) {
 
   // Trích thông tin từ kết quả
   const rec        = result?.zone_decision?.recommendation || '—';
-  const confidence = result?.zone_decision?.confidence != null
-                     ? (result.zone_decision.confidence * 100).toFixed(0) + '%'
+  const confidence = result?.zone_decision?.confidence_score != null
+                     ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%'
                      : '—';
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active ? '⚠ CÓ' : 'Không';
@@ -181,8 +181,8 @@ function alreadyAnalyzed(contractId) {
 
 function sendSuccessEmail(contractId, result) {
   const rec        = result?.zone_decision?.recommendation || '—';
-  const confidence = result?.zone_decision?.confidence != null
-                     ? (result.zone_decision.confidence * 100).toFixed(0) + '%'
+  const confidence = result?.zone_decision?.confidence_score != null
+                     ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%'
                      : '—';
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active;
