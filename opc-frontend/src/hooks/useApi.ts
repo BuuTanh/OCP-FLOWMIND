@@ -1,7 +1,8 @@
 import axios from 'axios';
 import type { AnalysisResult, Contract, CashflowMonth, RiskAlert } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// API_BASE is injected at build time by Vite from VITE_API_URL env var
+const API_BASE: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 const client = axios.create({ baseURL: API_BASE, timeout: 120000 });
 
