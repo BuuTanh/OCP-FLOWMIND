@@ -126,8 +126,17 @@ function runScheduled() {
   const cidCol = header.indexOf('contract_id');
   if (cidCol < 0) return;
 
-  // Lấy interval từ PropertiesService (không dùng hardcode fallback)
-  const interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every30min';
+  // Lấy interval từ Railway (web UI lưu ở đây), fallback PropertiesService
+  let interval = 'every30min';
+  try {
+    const r = UrlFetchApp.fetch(RAILWAY_URL + '/get-schedule', { muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) {
+      const data = JSON.parse(r.getContentText());
+      if (data && data.interval && data.interval !== 'off') interval = data.interval;
+    }
+  } catch (e) {
+    interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every30min';
+  }
   const windowMs = _intervalToMs(interval);
   const recentIds = _getRecentlyAnalyzedIds(windowMs);
 
