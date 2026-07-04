@@ -49,7 +49,7 @@ export function Settings() {
     setSchedSaving(true);
     setSchedError('');
     try {
-      const res = await axios.post(`${API_BASE}/set-schedule`, {
+      await axios.post(`${API_BASE}/set-schedule`, {
         interval: schedule,
         apps_script_url: appsScriptUrl,
       });
