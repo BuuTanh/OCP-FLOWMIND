@@ -126,8 +126,8 @@ function runScheduled() {
   const cidCol = header.indexOf('contract_id');
   if (cidCol < 0) return;
 
-  // Lấy danh sách contract_id đã phân tích gần đây (trong khoảng WINDOW)
-  const interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every1h';
+  // Lấy interval từ PropertiesService (không dùng hardcode fallback)
+  const interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every30min';
   const windowMs = _intervalToMs(interval);
   const recentIds = _getRecentlyAnalyzedIds(windowMs);
 
@@ -392,6 +392,15 @@ function sendDigestEmail(results, interval) {
 
 // ── 9. Helpers ────────────────────────────────────────────────────────────────
 
+/** Kiểm tra contract đã có trong AI_RESULTS sheet chưa */
+function alreadyAnalyzed(contractId) {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(RESULTS_SHEET);
+  if (!sheet || sheet.getLastRow() <= 1) return false;
+  const data = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getValues();
+  return data.some(function(row) { return String(row[0]).trim() === contractId; });
+}
+
 /** MD5 token cho decision buttons — phải khớp với _make_token() trong api.py */
 function _makeToken(contractId, action) {
   const raw   = contractId + ':' + action + ':' + DECISION_SECRET;
@@ -409,21 +418,40 @@ function _intervalToMs(interval) {
   return { 'every30min': 30, 'every1h': 60, 'every2h': 120, 'every4h': 240, 'daily8am': 1440 }[interval] * 60 * 1000 || 3600000;
 }
 
-// Lấy danh sách contractId đã được ghi vào AI_RESULTS trong khoảng windowMs gần nhất
+// Lấy danh sách contractId đã phân tích: từ AI_RESULTS sheet + từ web app (Railway)
 function _getRecentlyAnalyzedIds(windowMs) {
+  const ids    = new Set();
+  const cutoff = new Date(Date.now() - windowMs);
+
+  // 1. Từ AI_RESULTS sheet (phân tích qua Apps Script)
   const ss    = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(RESULTS_SHEET);
-  const ids   = new Set();
-  if (!sheet || sheet.getLastRow() <= 1) return ids;
-
-  const data    = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
-  const cutoff  = new Date(Date.now() - windowMs);
-
-  for (const [timeStr, contractId] of data) {
-    if (!contractId) continue;
-    const t = new Date(timeStr);
-    if (!isNaN(t) && t >= cutoff) ids.add(String(contractId).trim());
+  if (sheet && sheet.getLastRow() > 1) {
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+    for (const [timeStr, contractId] of data) {
+      if (!contractId) continue;
+      const t = new Date(timeStr);
+      if (!isNaN(t) && t >= cutoff) ids.add(String(contractId).trim());
+    }
   }
+
+  // 2. Từ web app Railway (phân tích qua giao diện web — đồng bộ để tránh chạy lại)
+  try {
+    const resp = UrlFetchApp.fetch(RAILWAY_URL + '/get-web-analyzed', {
+      muteHttpExceptions: true,
+      followRedirects: true,
+    });
+    if (resp.getResponseCode() === 200) {
+      const webAnalyzed = JSON.parse(resp.getContentText());
+      for (const [contractId, info] of Object.entries(webAnalyzed)) {
+        const t = new Date(info.timestamp);
+        if (!isNaN(t) && t >= cutoff) ids.add(String(contractId).trim());
+      }
+    }
+  } catch (e) {
+    Logger.log('⚠ Không lấy được web-analyzed từ Railway: ' + e);
+  }
+
   return ids;
 }
 

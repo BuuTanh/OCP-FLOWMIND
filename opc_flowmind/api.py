@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 import hashlib
+from datetime import datetime
 
 from agents.crisis_layer import run_crisis_scan
 from agents.dfa import DataFinanceAgent
@@ -214,6 +215,17 @@ def analyze(req: AnalyzeRequest):
         daemon=True
     ).start()
 
+    # Ghi nhận contract đã phân tích qua web (để Apps Script đồng bộ)
+    if not hasattr(app.state, "web_analyzed"):
+        app.state.web_analyzed = {}
+    app.state.web_analyzed[req.contract_id] = {
+        "recommendation": result.get("zone_decision", {}).get("recommendation", "—"),
+        "confidence":     result.get("zone_decision", {}).get("confidence_score", 0),
+        "alerts":         len(result.get("zone_decision", {}).get("risk_alerts", [])),
+        "crisis":         result.get("zone_workflow", {}).get("crisis_layer", {}).get("active", False),
+        "timestamp":      datetime.now().isoformat(),
+    }
+
     return result
 
 
@@ -334,6 +346,12 @@ def get_decisions():
     """Frontend polls to get all founder decisions."""
     decisions = getattr(app.state, "decisions", {})
     return decisions
+
+
+@app.get("/get-web-analyzed")
+def get_web_analyzed():
+    """Apps Script gọi để biết contract nào đã phân tích qua web — tránh chạy lại."""
+    return getattr(app.state, "web_analyzed", {})
 
 
 def _html_confirm(contract: str, label: str, color: str, pipeline_url: str) -> str:
