@@ -1043,7 +1043,7 @@ export function Pipeline() {
                 {(decision.three_reasons || []).map((r, i) => (
                   <li key={i} className="flex gap-3 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2.5 leading-relaxed">
                     <span className="font-bold text-brand-800 shrink-0 w-5">{i + 1}.</span>
-                    <span>{r}</span>
+                    <span className="flex-1">{renderMd(r)}</span>
                   </li>
                 ))}
               </ol>
@@ -1059,7 +1059,7 @@ export function Pipeline() {
                   </span>
                 )}
               </h3>
-              <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
                 {(decision.risk_alerts || []).map(a => (
                   <div key={a.alert_id} className={`flex items-start gap-2 text-xs text-slate-600 rounded px-1 py-0.5 ${resolvedIds.has(a.related_record) || resolvedIds.has(a.alert_id) ? 'opacity-40 line-through' : ''}`}>
                     <StatusBadge value={a.severity} size="sm" className="shrink-0 mt-0.5" />
