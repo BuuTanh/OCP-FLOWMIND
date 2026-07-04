@@ -40,7 +40,7 @@ class DecisionPartnerAgent(BaseAgent):
         # - CR không đề cập contract cụ thể (general) → dùng cho tất cả
         def _cr_relevant(cr: dict) -> bool:
             basis = cr.get("collateral_or_basis", "")
-            linked = [s for s in ["CON-001","CON-002","CON-003","CON-004","CON-005"] if s in basis]
+            linked = re.findall(r'CON-\d+', basis)
             return (not linked) or (contract_id in linked)
 
         relevant_credit_profiles = [cr for cr in credit_profiles if _cr_relevant(cr)]
@@ -179,10 +179,10 @@ class DecisionPartnerAgent(BaseAgent):
                     f"[ ] Bổ sung chứng từ cho {cr['credit_case_id']}: {cr.get('precheck_note','')}"
                 )
 
-        # Từ orders at risk
+        # Từ orders at risk — chỉ orders thuộc contract đang phân tích
         at_risk_orders = loader.get_orders()
         for order in at_risk_orders:
-            if order.get("status") == "At risk":
+            if order.get("contract_id") == contract_id and order.get("status") == "At risk":
                 approval_checklist.append(
                     f"[ ] Xác nhận kế hoạch xử lý {order['order_id']}: {order.get('delivery_note','')}"
                 )

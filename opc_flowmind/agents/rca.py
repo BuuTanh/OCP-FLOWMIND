@@ -6,7 +6,7 @@ from data.masking import mask_payload_for_openai
 from openai_engine.prompts import RCA_SYSTEM, RCA_USER_TEMPLATE
 from config import (CASH_RESERVE_MINIMUM, TARGET_GROSS_MARGIN,
                     HUMAN_APPROVAL_THRESHOLD, TRANSACTION_RISK_CRITICAL)
-import json
+import json, re
 
 class RiskComplianceAgent(BaseAgent):
     name = "Risk & Compliance Agent"
@@ -25,18 +25,16 @@ class RiskComplianceAgent(BaseAgent):
         # ── Filter credit profiles cho contract này ──────────────────────
         def _cr_for_contract(cr: dict) -> bool:
             basis = cr.get("collateral_or_basis", "")
-            linked = [s for s in ["CON-001","CON-002","CON-003","CON-004","CON-005"] if s in basis]
+            linked = re.findall(r'CON-\d+', basis)
             return (not linked) or (contract_id in linked)
 
         credit = [c for c in all_credit if _cr_for_contract(c)]
 
         # ── Merge pre-existing alerts từ 14_ALERTS ───────────────────────
         # Chỉ lấy alerts không gắn contract cụ thể, hoặc đúng contract đang xét
-        contract_ids = ["CON-001","CON-002","CON-003","CON-004","CON-005"]
-
         def _pre_alert_relevant(row: dict) -> bool:
             related = row.get("related_record", "")
-            linked = [c for c in contract_ids if c in related]
+            linked = re.findall(r'CON-\d+', related)
             return (not linked) or (contract_id in linked)
 
         pre_alerts: list[RiskAlert] = []
