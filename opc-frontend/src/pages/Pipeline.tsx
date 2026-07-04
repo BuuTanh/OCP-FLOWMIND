@@ -527,6 +527,17 @@ export function Pipeline() {
         .then(data => {
           setLastResult(data);
           setAnalysisHistory(h => ({ ...h, [cid]: data }));
+          const rec = data.zone_decision?.recommendation ?? '';
+          const alerts = data.zone_decision?.risk_alerts ?? [];
+          const runId = addRunEntry({
+            contractId: cid,
+            timestamp: new Date().toISOString(),
+            recommendation: rec,
+            confidence: data.zone_decision?.confidence_score ?? 0,
+            alertCount: alerts.length,
+            resolvedCount: 0,
+          });
+          addRunResult(runId, data);
         })
         .catch(() => {})
         .finally(() => setIsRunning(false));
