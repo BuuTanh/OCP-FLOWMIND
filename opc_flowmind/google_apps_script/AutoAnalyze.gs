@@ -81,37 +81,45 @@ function onSheetEdit(e) {
   const sheet = e.range.getSheet();
   if (sheet.getName() !== CONTRACTS_SHEET) return;
 
-  const row = e.range.getRow();
-  if (row <= 1) return;
+  const startRow = e.range.getRow();
+  const numRows  = e.range.getNumRows();
+  if (startRow <= 1) return;
 
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
                        .map(h => String(h).trim().toLowerCase());
-  const rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const cidIdx  = headers.indexOf('contract_id');
+  if (cidIdx < 0) return;
 
-  const missing = REQUIRED_FIELDS.filter(field => {
-    const idx = headers.indexOf(field.toLowerCase());
-    if (idx < 0) return true;
-    const val = String(rowData[idx] || '').trim();
-    return val === '' || val === '0';
-  });
+  // Quét toàn bộ vùng vừa được paste (có thể nhiều hàng cùng lúc)
+  const firstDataRow = startRow <= 1 ? 2 : startRow;
+  const rangeData    = sheet.getRange(firstDataRow, 1, numRows, sheet.getLastColumn()).getValues();
 
-  if (missing.length > 0) {
-    Logger.log('⏳ Hàng ' + row + ' chưa đủ — thiếu: ' + missing.join(', '));
-    return;
+  for (let i = 0; i < rangeData.length; i++) {
+    const rowData    = rangeData[i];
+    const contractId = String(rowData[cidIdx] || '').trim();
+    if (!contractId) continue;
+
+    const missing = REQUIRED_FIELDS.filter(field => {
+      const idx = headers.indexOf(field.toLowerCase());
+      if (idx < 0) return true;
+      const val = String(rowData[idx] || '').trim();
+      return val === '' || val === '0';
+    });
+
+    if (missing.length > 0) {
+      Logger.log('⏳ ' + contractId + ' chưa đủ — thiếu: ' + missing.join(', '));
+      continue;
+    }
+
+    if (alreadyAnalyzed(contractId)) {
+      Logger.log('⏭ ' + contractId + ' đã phân tích, bỏ qua.');
+      continue;
+    }
+
+    Logger.log('🚀 Thêm mới → phân tích ' + contractId);
+    const result = runAnalysis(contractId);
+    if (result) sendSingleEmail(contractId, result);
   }
-
-  const cidIdx = headers.indexOf('contract_id');
-  const contractId = String(rowData[cidIdx] || '').trim();
-  if (!contractId) return;
-
-  if (alreadyAnalyzed(contractId)) {
-    Logger.log('⏭ ' + contractId + ' đã phân tích, bỏ qua.');
-    return;
-  }
-
-  Logger.log('🚀 Thêm mới → phân tích ' + contractId);
-  const result = runAnalysis(contractId);
-  if (result) sendSingleEmail(contractId, result);
 }
 
 // ── 4. Scheduled job — chạy định kỳ ─────────────────────────────────────────
