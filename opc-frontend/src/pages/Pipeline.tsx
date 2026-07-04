@@ -9,7 +9,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import type { AnalysisResult } from '../types';
 import type { ContractDecision } from '../context/AppContext';
 
-const CONTRACTS_FALLBACK = ['CON-001', 'CON-002', 'CON-003', 'CON-004', 'CON-005'];
+const CONTRACTS_FALLBACK: string[] = [];
 
 const SEVERITY_BADGE: Record<string, string> = {
   'Critical':      'bg-red-100 text-red-700 border border-red-200',
