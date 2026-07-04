@@ -33,6 +33,7 @@ export function Dashboard() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
   const [decisions, setDecisions] = useState<Record<string, { action: string; timestamp: string }>>({});
+  const [cashPosition, setCashPosition] = useState<{ value: number; month: string; status: string } | null>(null);
 
   const API_BASE: string = (import.meta.env.VITE_API_URL as string) ?? 'http://localhost:8000';
 
@@ -41,6 +42,18 @@ export function Dashboard() {
       .then(data => setContracts(data))
       .catch(() => {})
       .finally(() => setLoadingContracts(false));
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/cashflow`)
+      .then(r => r.json())
+      .then((rows: { month: string; projected_closing_cash: number; status: string }[]) => {
+        if (!rows || rows.length === 0) return;
+        // Lấy tháng gần nhất có dữ liệu
+        const last = rows[rows.length - 1];
+        setCashPosition({ value: last.projected_closing_cash, month: last.month, status: last.status });
+      })
+      .catch(() => {});
   }, []);
 
   // Poll founder decisions every 30s
@@ -60,7 +73,7 @@ export function Dashboard() {
   const historyEntries = Object.entries(analysisHistory);
   const allAlerts = historyEntries.flatMap(([, r]) => r.zone_decision.risk_alerts || []);
   const criticalCount = allAlerts.filter(a => a.severity === 'Critical').length;
-  const cashPosition = lastResult?.zone_input.cashflow_chart[0]?.projected_closing_cash;
+  const cashPositionValue = cashPosition?.value ?? lastResult?.zone_input.cashflow_chart[0]?.projected_closing_cash;
 
   // Crisis banner: active only when actual analysis detected crisis AND not resolved
   const crisisActive = lastResult?.zone_workflow.crisis_layer.active && !crisisResolved;
@@ -114,10 +127,10 @@ export function Dashboard() {
         />
         <KpiCard
           label="Cash position"
-          value={cashPosition != null ? formatVnd(cashPosition) : '—'}
-          sub={cashPosition != null ? 'tháng gần nhất (phân tích)' : 'Chưa phân tích'}
+          value={cashPositionValue != null ? formatVnd(cashPositionValue) : '—'}
+          sub={cashPosition ? `${cashPosition.month} · ${cashPosition.status === 'CRITICAL' ? '⚠ Nguy hiểm' : cashPosition.status === 'WARNING' ? '⚠ Cảnh báo' : '✓ Ổn định'}` : cashPositionValue != null ? 'tháng gần nhất' : 'Đang tải…'}
           icon={TrendingUp}
-          iconColor="text-blue-600"
+          iconColor={cashPosition?.status === 'CRITICAL' ? 'text-red-500' : cashPosition?.status === 'WARNING' ? 'text-amber-500' : 'text-blue-600'}
         />
         <KpiCard
           label="Cảnh báo rủi ro"
