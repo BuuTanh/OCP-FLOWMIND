@@ -77,7 +77,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-white/10">
           <div className="text-blue-200 text-xs">MIS Talent 2026</div>
-          <div className="text-blue-300 text-xs mt-0.5">Nguyễn An – UEL</div>
+          <div className="text-blue-300 text-xs mt-0.5">Đây Là Tam Ca</div>
         </div>
       </aside>
 
