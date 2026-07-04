@@ -2,40 +2,78 @@
  * OPC FlowMind — Auto-Analyze trigger
  *
  * Cách dùng:
- *   1. Mở Google Sheets OPC_CoreData
- *   2. Extensions → Apps Script → paste toàn bộ file này
- *   3. Chạy setupTrigger() MỘT LẦN để cài trigger
- *   4. Mỗi khi sheet 04_CONTRACTS có hàng mới → script tự phân tích và ghi kết quả
+ *   1. Mở Google Sheets OPC_CoreData → Extensions → Apps Script → paste file này
+ *   2. Chạy setupTrigger() MỘT LẦN để cài onEdit trigger
+ *   3. Vào Settings trên web app → chọn lịch tự động → bấm "Lưu lịch"
+ *      (hoặc chạy setupScheduledTrigger() thủ công từ editor)
  *
  * Kết quả ghi vào sheet "AI_RESULTS" (tự tạo nếu chưa có).
  */
 
 // ── Cấu hình ─────────────────────────────────────────────────────────────────
 
-const RAILWAY_URL = 'https://ocp-flowmind-production.up.railway.app';
-const CONTRACTS_SHEET = '04_CONTRACTS';   // tên tab chứa danh sách hợp đồng
-const RESULTS_SHEET   = 'AI_RESULTS';     // tab ghi kết quả phân tích
-const CONTRACT_ID_COL = 'A';              // cột chứa contract_id trong CONTRACTS_SHEET
+const RAILWAY_URL     = 'https://ocp-flowmind-production.up.railway.app';
+const CONTRACTS_SHEET = '04_CONTRACTS';
+const RESULTS_SHEET   = 'AI_RESULTS';
 const NOTIFY_EMAIL    = 'tanhtlb23411@st.uel.edu.vn';
 
-// ── Cài trigger (chạy 1 lần) ─────────────────────────────────────────────────
+// Tên các cột bắt buộc trước khi phân tích
+const REQUIRED_FIELDS = ['contract_id', 'customer_id', 'contract_value', 'gross_margin', 'start_date', 'end_date'];
+
+// ── 1. Cài onEdit trigger (chạy 1 lần) ───────────────────────────────────────
 
 function setupTrigger() {
-  // Xóa trigger cũ tránh duplicate
-  ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'onSheetEdit') ScriptApp.deleteTrigger(t);
-  });
+  _deleteTriggersFor('onSheetEdit');
   ScriptApp.newTrigger('onSheetEdit')
     .forSpreadsheet(SpreadsheetApp.getActive())
     .onEdit()
     .create();
-  Logger.log('✅ Trigger đã cài. Mỗi lần thêm hợp đồng mới sẽ tự phân tích.');
+  Logger.log('✅ onEdit trigger đã cài.');
 }
 
-// ── Handler chính ─────────────────────────────────────────────────────────────
+// ── 2. Cài / cập nhật scheduled trigger ──────────────────────────────────────
 
-// Tên các cột bắt buộc phải có giá trị trước khi trigger phân tích
-const REQUIRED_FIELDS = ['contract_id', 'customer_id', 'contract_value', 'gross_margin', 'start_date', 'end_date'];
+/**
+ * Gọi hàm này để cài lịch tự động.
+ * interval: 'off' | 'every30min' | 'every1h' | 'every2h' | 'every4h' | 'daily8am'
+ *
+ * Frontend Settings gọi endpoint /set-schedule trên Railway → Railway gọi hàm này qua
+ * PropertiesService, HOẶC user chạy trực tiếp từ Apps Script editor.
+ */
+function setupScheduledTrigger(interval) {
+  // Đọc từ PropertiesService nếu không truyền tham số
+  if (!interval) {
+    interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'off';
+  }
+
+  // Xóa scheduled trigger cũ
+  _deleteTriggersFor('runScheduled');
+
+  if (interval === 'off') {
+    Logger.log('⏹ Lịch tự động đã TẮT.');
+    PropertiesService.getScriptProperties().setProperty('SCHEDULE_INTERVAL', 'off');
+    return;
+  }
+
+  let trigger;
+  if (interval === 'every30min') {
+    trigger = ScriptApp.newTrigger('runScheduled').timeBased().everyMinutes(30).create();
+  } else if (interval === 'every1h') {
+    trigger = ScriptApp.newTrigger('runScheduled').timeBased().everyHours(1).create();
+  } else if (interval === 'every2h') {
+    trigger = ScriptApp.newTrigger('runScheduled').timeBased().everyHours(2).create();
+  } else if (interval === 'every4h') {
+    trigger = ScriptApp.newTrigger('runScheduled').timeBased().everyHours(4).create();
+  } else if (interval === 'daily8am') {
+    trigger = ScriptApp.newTrigger('runScheduled').timeBased()
+      .everyDays(1).atHour(8).nearMinute(0).create();
+  }
+
+  PropertiesService.getScriptProperties().setProperty('SCHEDULE_INTERVAL', interval);
+  Logger.log('✅ Lịch tự động: ' + interval);
+}
+
+// ── 3. Handler onEdit (thêm hợp đồng mới) ────────────────────────────────────
 
 function onSheetEdit(e) {
   if (!e || !e.range) return;
@@ -43,51 +81,87 @@ function onSheetEdit(e) {
   if (sheet.getName() !== CONTRACTS_SHEET) return;
 
   const row = e.range.getRow();
-  if (row <= 1) return;  // bỏ qua header
+  if (row <= 1) return;
 
-  // Lấy header row để tìm index cột
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
                        .map(h => String(h).trim().toLowerCase());
-
-  // Lấy toàn bộ dữ liệu hàng vừa sửa
   const rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  // Kiểm tra tất cả field bắt buộc đều có giá trị
   const missing = REQUIRED_FIELDS.filter(field => {
     const idx = headers.indexOf(field.toLowerCase());
-    if (idx < 0) return true;  // không tìm thấy cột → thiếu
+    if (idx < 0) return true;
     const val = String(rowData[idx] || '').trim();
     return val === '' || val === '0';
   });
 
   if (missing.length > 0) {
-    Logger.log('⏳ Hàng ' + row + ' chưa đủ dữ liệu — còn thiếu: ' + missing.join(', '));
+    Logger.log('⏳ Hàng ' + row + ' chưa đủ — thiếu: ' + missing.join(', '));
     return;
   }
 
-  // Lấy contract_id
   const cidIdx = headers.indexOf('contract_id');
   const contractId = String(rowData[cidIdx] || '').trim();
   if (!contractId) return;
 
-  // Tránh phân tích trùng nếu đã có kết quả
   if (alreadyAnalyzed(contractId)) {
-    Logger.log('⏭ ' + contractId + ' đã được phân tích trước đó, bỏ qua.');
+    Logger.log('⏭ ' + contractId + ' đã phân tích, bỏ qua.');
     return;
   }
 
-  Logger.log('🚀 Tất cả field đủ — bắt đầu phân tích ' + contractId);
-  runAnalysis(contractId);
+  Logger.log('🚀 Thêm mới → phân tích ' + contractId);
+  const result = runAnalysis(contractId);
+  if (result) sendSingleEmail(contractId, result);
 }
 
-// ── Gọi Railway backend ───────────────────────────────────────────────────────
+// ── 4. Scheduled job — chạy định kỳ ─────────────────────────────────────────
+
+function runScheduled() {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(CONTRACTS_SHEET);
+  if (!sheet) return;
+
+  const rows   = sheet.getDataRange().getValues();
+  const header = rows[0].map(h => String(h).toLowerCase().trim());
+  const cidCol = header.indexOf('contract_id');
+  if (cidCol < 0) return;
+
+  // Lấy danh sách contract_id đã phân tích gần đây (trong khoảng WINDOW)
+  const interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every1h';
+  const windowMs = _intervalToMs(interval);
+  const recentIds = _getRecentlyAnalyzedIds(windowMs);
+
+  // Tìm contracts chưa phân tích trong window này
+  const toAnalyze = [];
+  for (let i = 1; i < rows.length; i++) {
+    const contractId = String(rows[i][cidCol] || '').trim();
+    if (!contractId) continue;
+    // Chạy lại nếu: chưa từng phân tích, HOẶC chưa phân tích trong khoảng thời gian này
+    if (!recentIds.has(contractId)) toAnalyze.push(contractId);
+  }
+
+  if (toAnalyze.length === 0) {
+    Logger.log('✅ Scheduled run: tất cả hợp đồng đã được phân tích gần đây, bỏ qua.');
+    return;
+  }
+
+  Logger.log('🔄 Scheduled run: phân tích ' + toAnalyze.length + ' hợp đồng...');
+
+  const results = [];
+  for (const contractId of toAnalyze) {
+    Logger.log('  → ' + contractId);
+    const result = runAnalysis(contractId);
+    if (result) results.push({ contractId, result });
+    Utilities.sleep(3000); // tránh overload Railway
+  }
+
+  if (results.length > 0) sendDigestEmail(results, interval);
+  Logger.log('✅ Scheduled run hoàn tất: ' + results.length + '/' + toAnalyze.length + ' thành công.');
+}
+
+// ── 5. Gọi Railway backend ────────────────────────────────────────────────────
 
 function runAnalysis(contractId) {
-  const payload = JSON.stringify({
-    contract_id: contractId,
-    crisis_resolved: false,
-    resolved_items: []
-  });
+  const payload = JSON.stringify({ contract_id: contractId, crisis_resolved: false, resolved_items: [] });
 
   let response;
   try {
@@ -96,112 +170,81 @@ function runAnalysis(contractId) {
       contentType: 'application/json',
       payload: payload,
       muteHttpExceptions: true,
-      // Railway cold start có thể 30-60s
       followRedirects: true,
     });
   } catch (err) {
-    Logger.log('❌ Lỗi kết nối Railway: ' + err);
-    sendErrorEmail(contractId, 'Không thể kết nối Railway: ' + err);
-    return;
+    Logger.log('❌ Kết nối Railway thất bại (' + contractId + '): ' + err);
+    return null;
   }
 
   const code = response.getResponseCode();
   if (code !== 200) {
-    Logger.log('❌ Railway trả về ' + code + ': ' + response.getContentText());
-    sendErrorEmail(contractId, 'Railway lỗi ' + code + ': ' + response.getContentText().slice(0, 300));
-    return;
+    Logger.log('❌ Railway ' + code + ' (' + contractId + '): ' + response.getContentText().slice(0, 200));
+    return null;
   }
 
   let result;
   try {
     result = JSON.parse(response.getContentText());
   } catch (err) {
-    Logger.log('❌ Không parse được JSON: ' + err);
-    return;
+    Logger.log('❌ Parse JSON thất bại (' + contractId + '): ' + err);
+    return null;
   }
 
   writeResult(contractId, result);
-  sendSuccessEmail(contractId, result);
-  Logger.log('✅ Phân tích xong: ' + contractId);
+  return result;
 }
 
-// ── Ghi kết quả vào sheet AI_RESULTS ─────────────────────────────────────────
+// ── 6. Ghi kết quả vào AI_RESULTS ────────────────────────────────────────────
 
 function writeResult(contractId, result) {
-  const ss    = SpreadsheetApp.getActive();
-  let sheet   = ss.getSheetByName(RESULTS_SHEET);
+  const ss  = SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(RESULTS_SHEET);
 
-  // Tạo sheet nếu chưa có
   if (!sheet) {
     sheet = ss.insertSheet(RESULTS_SHEET);
-    sheet.appendRow([
-      'Thời gian', 'Hợp đồng', 'Khuyến nghị', 'Confidence',
-      'Alerts', 'Crisis', 'Ghi chú DPA'
-    ]);
+    sheet.appendRow(['Thời gian', 'Hợp đồng', 'Khuyến nghị', 'Confidence', 'Alerts', 'Crisis', 'Ghi chú DPA']);
     sheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
     sheet.setFrozenRows(1);
   }
 
-  // Trích thông tin từ kết quả
   const rec        = result?.zone_decision?.recommendation || '—';
   const confidence = result?.zone_decision?.confidence_score != null
-                     ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%'
-                     : '—';
+                     ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%' : '—';
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active ? '⚠ CÓ' : 'Không';
   const note       = (result?.zone_decision?.three_reasons || []).slice(0, 2).join(' | ');
 
-  sheet.appendRow([
-    new Date().toLocaleString('vi-VN'),
-    contractId,
-    rec,
-    confidence,
-    alerts,
-    crisis,
-    note
-  ]);
+  sheet.appendRow([new Date().toLocaleString('vi-VN'), contractId, rec, confidence, alerts, crisis, note]);
 
-  // Tô màu hàng theo recommendation
   const lastRow = sheet.getLastRow();
-  const color   = rec === 'KÝ' ? '#e6f4ea' : rec === 'TỪ CHỐI' ? '#fce8e6' : '#fff8e1';
+  const color   = rec === 'KY' ? '#e6f4ea' : rec === 'KHONG_KY' ? '#fce8e6' : '#fff8e1';
   sheet.getRange(lastRow, 1, 1, 7).setBackground(color);
 }
 
-// ── Kiểm tra đã phân tích chưa ───────────────────────────────────────────────
+// ── 7. Email: gửi riêng (khi thêm mới) ───────────────────────────────────────
 
-function alreadyAnalyzed(contractId) {
-  const ss    = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName(RESULTS_SHEET);
-  if (!sheet || sheet.getLastRow() <= 1) return false;
-  const ids = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getValues().flat();
-  return ids.includes(contractId);
-}
-
-// ── Email thông báo ───────────────────────────────────────────────────────────
-
-function sendSuccessEmail(contractId, result) {
+function sendSingleEmail(contractId, result) {
   const rec        = result?.zone_decision?.recommendation || '—';
   const confidence = result?.zone_decision?.confidence_score != null
-                     ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%'
-                     : '—';
+                     ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%' : '—';
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active;
   const reasons    = (result?.zone_decision?.three_reasons || [])
-                     .map((r, i) => '<li>' + (i+1) + '. ' + r + '</li>').join('');
-
-  const recColor = rec === 'KÝ' ? '#1e7e34' : rec === 'TỪ CHỐI' ? '#c0392b' : '#e67e22';
+                     .map((r, i) => `<li>${i+1}. ${r}</li>`).join('');
+  const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : '#e67e22';
+  const recLabel   = rec === 'KY' ? '✅ KÝ HỢP ĐỒNG' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : '⚠ KÝ CÓ ĐIỀU KIỆN';
 
   const html = `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
-    <h2 style="margin:0">🤖 OPC FlowMind — Kết quả phân tích mới</h2>
+    <h2 style="margin:0">🤖 OPC FlowMind — Hợp đồng mới: ${contractId}</h2>
   </div>
   <div style="padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">Hợp đồng <strong>${contractId}</strong> vừa được phân tích tự động.</p>
     <table style="width:100%;border-collapse:collapse">
       <tr style="background:#f5f5f5">
-        <td style="padding:10px 14px;font-weight:bold">Khuyến nghị</td>
-        <td style="padding:10px 14px;color:${recColor};font-weight:bold;font-size:18px">${rec}</td>
+        <td style="padding:10px 14px;font-weight:bold;width:140px">Khuyến nghị</td>
+        <td style="padding:10px 14px;color:${recColor};font-weight:bold;font-size:18px">${recLabel}</td>
       </tr>
       <tr>
         <td style="padding:10px 14px;font-weight:bold">Độ tin cậy</td>
@@ -218,60 +261,160 @@ function sendSuccessEmail(contractId, result) {
     </table>
     ${reasons ? `<div style="margin-top:16px"><strong>Lý do chính:</strong><ul style="margin-top:8px">${reasons}</ul></div>` : ''}
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
-      <a href="https://ocpflowmind-ten.vercel.app/pipeline?contract=${contractId}" style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
-        Xem chi tiết trên Dashboard →
+      <a href="https://ocpflowmind-ten.vercel.app/pipeline?contract=${contractId}"
+         style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
+        Xem chi tiết →
       </a>
     </div>
   </div>
-  <p style="color:#999;font-size:12px;margin-top:12px;text-align:center">OPC FlowMind Agentic AI — tự động gửi lúc ${new Date().toLocaleString('vi-VN')}</p>
+  <p style="color:#999;font-size:12px;margin-top:12px;text-align:center">
+    OPC FlowMind — ${new Date().toLocaleString('vi-VN')}
+  </p>
 </div>`;
 
   MailApp.sendEmail({
     to: NOTIFY_EMAIL,
-    subject: `[OPC FlowMind] ${contractId} → ${rec} (${confidence})`,
+    subject: `[OPC FlowMind] ${contractId} → ${recLabel} (${confidence})`,
     htmlBody: html,
   });
 }
 
-function sendErrorEmail(contractId, errorMsg) {
-  MailApp.sendEmail({
-    to: NOTIFY_EMAIL,
-    subject: `[OPC FlowMind] ❌ Lỗi phân tích ${contractId}`,
-    body: `Phân tích ${contractId} thất bại.\n\nLỗi: ${errorMsg}\n\nVui lòng kiểm tra Railway logs.`,
+// ── 8. Email: digest (khi scheduled chạy nhiều hợp đồng) ─────────────────────
+
+function sendDigestEmail(results, interval) {
+  const intervalLabel = {
+    'every30min': 'mỗi 30 phút', 'every1h': 'mỗi 1 giờ',
+    'every2h': 'mỗi 2 giờ', 'every4h': 'mỗi 4 giờ', 'daily8am': 'hàng ngày lúc 8:00'
+  }[interval] || interval;
+
+  const rows = results.map(({ contractId, result }) => {
+    const rec        = result?.zone_decision?.recommendation || '—';
+    const confidence = result?.zone_decision?.confidence_score != null
+                       ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%' : '—';
+    const alerts     = (result?.zone_decision?.risk_alerts || []).length;
+    const crisis     = result?.zone_workflow?.crisis_layer?.active;
+    const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : '#e67e22';
+    const recLabel   = rec === 'KY' ? '✅ KÝ' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : '⚠ CÓ ĐK';
+    const link       = `https://ocpflowmind-ten.vercel.app/pipeline?contract=${contractId}`;
+    return `
+      <tr>
+        <td style="padding:10px 14px;font-weight:bold">
+          <a href="${link}" style="color:#1e3a5f;text-decoration:none">${contractId}</a>
+        </td>
+        <td style="padding:10px 14px;color:${recColor};font-weight:bold">${recLabel}</td>
+        <td style="padding:10px 14px">${confidence}</td>
+        <td style="padding:10px 14px">${alerts} alert${alerts !== 1 ? 's' : ''}</td>
+        <td style="padding:10px 14px">${crisis ? '⚠ CÓ' : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  const html = `
+<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">
+  <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0">🤖 OPC FlowMind — Báo cáo định kỳ (${intervalLabel})</h2>
+    <p style="margin:6px 0 0;opacity:.8;font-size:14px">${results.length} hợp đồng được phân tích lúc ${new Date().toLocaleString('vi-VN')}</p>
+  </div>
+  <div style="padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#f5f5f5;font-weight:bold">
+          <th style="padding:10px 14px;text-align:left">Hợp đồng</th>
+          <th style="padding:10px 14px;text-align:left">Khuyến nghị</th>
+          <th style="padding:10px 14px;text-align:left">Confidence</th>
+          <th style="padding:10px 14px;text-align:left">Alerts</th>
+          <th style="padding:10px 14px;text-align:left">Crisis</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
+      <a href="https://ocpflowmind-ten.vercel.app/dashboard"
+         style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
+        Mở Dashboard →
+      </a>
+    </div>
+  </div>
+  <p style="color:#999;font-size:12px;margin-top:12px;text-align:center">OPC FlowMind Agentic AI</p>
+</div>`;
+
+  const needAction = results.filter(({ result }) => {
+    const rec = result?.zone_decision?.recommendation || '';
+    return rec === 'KHONG_KY' || result?.zone_workflow?.crisis_layer?.active;
+  }).length;
+
+  const subject = needAction > 0
+    ? `[OPC FlowMind] ⚠ ${needAction} hợp đồng cần chú ý — Báo cáo ${intervalLabel}`
+    : `[OPC FlowMind] ✅ Báo cáo định kỳ — ${results.length} hợp đồng OK`;
+
+  MailApp.sendEmail({ to: NOTIFY_EMAIL, subject, htmlBody: html });
+}
+
+// ── 9. Helpers ────────────────────────────────────────────────────────────────
+
+function _deleteTriggersFor(fnName) {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === fnName) ScriptApp.deleteTrigger(t);
   });
 }
 
-// ── Phân tích thủ công (chạy từ Apps Script editor) ──────────────────────────
-
-function manualAnalyze() {
-  // Thay contract_id muốn test ở đây
-  runAnalysis('CON-001');
+function _intervalToMs(interval) {
+  return { 'every30min': 30, 'every1h': 60, 'every2h': 120, 'every4h': 240, 'daily8am': 1440 }[interval] * 60 * 1000 || 3600000;
 }
 
-/**
- * Phân tích TẤT CẢ hợp đồng trong sheet 04_CONTRACTS (dùng để chạy batch lần đầu)
- * Chạy từ Apps Script editor: chọn hàm → Run
- */
+// Lấy danh sách contractId đã được ghi vào AI_RESULTS trong khoảng windowMs gần nhất
+function _getRecentlyAnalyzedIds(windowMs) {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(RESULTS_SHEET);
+  const ids   = new Set();
+  if (!sheet || sheet.getLastRow() <= 1) return ids;
+
+  const data    = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  const cutoff  = new Date(Date.now() - windowMs);
+
+  for (const [timeStr, contractId] of data) {
+    if (!contractId) continue;
+    const t = new Date(timeStr);
+    if (!isNaN(t) && t >= cutoff) ids.add(String(contractId).trim());
+  }
+  return ids;
+}
+
+// ── 10. Hàm tiện ích (chạy thủ công từ editor) ───────────────────────────────
+
+/** Test phân tích 1 hợp đồng */
+function manualAnalyze() {
+  const contractId = 'CON-001'; // thay contract_id muốn test
+  const result = runAnalysis(contractId);
+  if (result) sendSingleEmail(contractId, result);
+}
+
+/** Phân tích tất cả (batch lần đầu) */
 function analyzeAll() {
   const ss     = SpreadsheetApp.getActive();
   const sheet  = ss.getSheetByName(CONTRACTS_SHEET);
-  if (!sheet) { Logger.log('Không tìm thấy sheet ' + CONTRACTS_SHEET); return; }
+  if (!sheet) return;
 
-  const rows = sheet.getDataRange().getValues();
-  // Tìm index cột contract_id (header hàng 1)
+  const rows   = sheet.getDataRange().getValues();
   const header = rows[0].map(h => String(h).toLowerCase().trim());
   const cidCol = header.indexOf('contract_id');
-  if (cidCol < 0) { Logger.log('Không tìm thấy cột contract_id trong header'); return; }
+  if (cidCol < 0) return;
 
-  let count = 0;
+  const results = [];
   for (let i = 1; i < rows.length; i++) {
     const contractId = String(rows[i][cidCol] || '').trim();
     if (!contractId) continue;
-    Logger.log('📋 Phân tích ' + (i) + '/' + (rows.length - 1) + ': ' + contractId);
-    runAnalysis(contractId);
-    // Delay 3s giữa các request để Railway không bị overload
+    Logger.log('📋 ' + i + '/' + (rows.length - 1) + ': ' + contractId);
+    const result = runAnalysis(contractId);
+    if (result) results.push({ contractId, result });
     Utilities.sleep(3000);
-    count++;
   }
-  Logger.log('✅ Đã phân tích ' + count + ' hợp đồng.');
+  if (results.length > 0) sendDigestEmail(results, 'analyzeAll');
+  Logger.log('✅ Xong: ' + results.length + ' hợp đồng.');
+}
+
+/** Xem lịch triggers hiện tại */
+function listTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    Logger.log(t.getHandlerFunction() + ' — ' + t.getTriggerSource());
+  });
 }

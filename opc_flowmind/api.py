@@ -286,6 +286,26 @@ def memory_invalidate():
     return {"status": "cache cleared"}
 
 
+_VALID_INTERVALS = {"off", "every30min", "every1h", "every2h", "every4h", "daily8am"}
+
+@app.post("/set-schedule")
+def set_schedule(body: dict):
+    """Lưu interval lịch chạy định kỳ. Apps Script đọc từ đây qua /get-schedule."""
+    interval = body.get("interval", "off")
+    if interval not in _VALID_INTERVALS:
+        return {"status": "error", "message": f"interval không hợp lệ: {interval}"}
+    # Lưu vào in-memory (đủ dùng — Apps Script đọc khi cần)
+    app.state.schedule_interval = interval
+    return {"status": "ok", "interval": interval}
+
+
+@app.get("/get-schedule")
+def get_schedule():
+    """Apps Script gọi để lấy interval hiện tại."""
+    interval = getattr(app.state, "schedule_interval", "off")
+    return {"interval": interval}
+
+
 def _safe_float(v) -> float:
     try:
         return float(str(v).replace(",", "").replace("%", ""))
