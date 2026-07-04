@@ -1035,7 +1035,7 @@ export function Pipeline() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             {/* Reasons */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-800 mb-3">Lý do chính ({(decision.three_reasons || []).length})</h3>
