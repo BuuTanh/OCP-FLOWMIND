@@ -9,7 +9,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import type { AnalysisResult } from '../types';
 import type { ContractDecision } from '../context/AppContext';
 
-const CONTRACTS = ['CON-001', 'CON-002', 'CON-003', 'CON-004', 'CON-005'];
+const CONTRACTS_FALLBACK = ['CON-001', 'CON-002', 'CON-003', 'CON-004', 'CON-005'];
 
 const REC_LABELS: Record<string, string> = {
   KY: '✅ KÝ HỢP ĐỒNG',
@@ -494,17 +494,43 @@ export function Pipeline() {
           setLastResult, setIsRunning, isRunning, analysisHistory, setAnalysisHistory,
           addNotification, runLog, addRunEntry, runResults, addRunResult,
           contractDecisions, saveDecision, clearDecision } = useApp();
-  const { runAnalysis } = useApi();
+  const { runAnalysis, getContracts } = useApi();
   const location = useLocation();
 
+  // Fetch contract list động từ backend
+  const [contractList, setContractList] = useState<string[]>(CONTRACTS_FALLBACK);
+  useEffect(() => {
+    getContracts()
+      .then(data => {
+        const ids = data.map(c => c.contract_id).filter(Boolean);
+        if (ids.length > 0) setContractList(ids);
+      })
+      .catch(() => {});
+  }, []);
+
   // Đọc ?contract=CON-XXX từ URL (gửi từ email link)
+  // Nếu chưa có kết quả trong localStorage → tự chạy phân tích
+  const [autoRunDone, setAutoRunDone] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const cid = params.get('contract');
-    if (!cid) return;
+    if (!cid || autoRunDone) return;
     setSelectedContract(cid);
     const hist = analysisHistory[cid];
-    if (hist) setLastResult(hist);
+    if (hist) {
+      setLastResult(hist);
+    } else {
+      // Chưa có kết quả → tự động chạy phân tích
+      setAutoRunDone(true);
+      setIsRunning(true);
+      runAnalysis(cid, false, [])
+        .then(data => {
+          setLastResult(data);
+          setAnalysisHistory(h => ({ ...h, [cid]: data }));
+        })
+        .catch(() => {})
+        .finally(() => setIsRunning(false));
+    }
   }, [location.search]);
 
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([0]));
@@ -716,7 +742,7 @@ export function Pipeline() {
             onChange={e => setSelectedContract(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-600"
           >
-            {CONTRACTS.map(c => <option key={c}>{c}</option>)}
+            {contractList.map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
 
