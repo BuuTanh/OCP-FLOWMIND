@@ -168,7 +168,7 @@ export function Settings() {
               onChange={e => setSchedule(e.target.value)}
               className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-600"
             >
-              <option value="off">Tắt (thủ công)</option>
+              <option value="off">Mỗi khi có hợp đồng mới (mặc định)</option>
               <option value="every30min">Mỗi 30 phút</option>
               <option value="every1h">Mỗi 1 giờ</option>
               <option value="every2h">Mỗi 2 giờ</option>
