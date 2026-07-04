@@ -152,12 +152,7 @@ function runScheduled() {
   const sheet = ss.getSheetByName(CONTRACTS_SHEET);
   if (!sheet) return;
 
-  const rows   = sheet.getDataRange().getValues();
-  const header = rows[0].map(h => String(h).toLowerCase().trim());
-  const cidCol = header.indexOf('contract_id');
-  if (cidCol < 0) return;
-
-  // Lấy interval từ Railway (web UI lưu ở đây), fallback PropertiesService
+  // Lấy interval từ Railway, fallback PropertiesService
   let interval = 'every30min';
   try {
     const r = UrlFetchApp.fetch(RAILWAY_URL + '/get-schedule', { muteHttpExceptions: true });
@@ -168,35 +163,19 @@ function runScheduled() {
   } catch (e) {
     interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every30min';
   }
-  const windowMs = _intervalToMs(interval);
-  const recentIds = _getRecentlyAnalyzedIds(windowMs);
 
-  // Tìm contracts chưa phân tích trong window này
-  const toAnalyze = [];
-  for (let i = 1; i < rows.length; i++) {
-    const contractId = String(rows[i][cidCol] || '').trim();
-    if (!contractId) continue;
-    // Chạy lại nếu: chưa từng phân tích, HOẶC chưa phân tích trong khoảng thời gian này
-    if (!recentIds.has(contractId)) toAnalyze.push(contractId);
-  }
+  // Gom các contract đã phân tích (có trong AI_RESULTS) nhưng chưa gửi email digest
+  const pendingResults = _getPendingEmailResults();
 
-  if (toAnalyze.length === 0) {
-    Logger.log('✅ Scheduled run: tất cả hợp đồng đã được phân tích gần đây, bỏ qua.');
+  if (pendingResults.length === 0) {
+    Logger.log('✅ Scheduled run: không có hợp đồng nào chờ gửi email.');
     return;
   }
 
-  Logger.log('🔄 Scheduled run: phân tích ' + toAnalyze.length + ' hợp đồng...');
-
-  const results = [];
-  for (const contractId of toAnalyze) {
-    Logger.log('  → ' + contractId);
-    const result = runAnalysis(contractId);
-    if (result) results.push({ contractId, result });
-    Utilities.sleep(3000); // tránh overload Railway
-  }
-
-  if (results.length > 0) sendDigestEmail(results, interval);
-  Logger.log('✅ Scheduled run hoàn tất: ' + results.length + '/' + toAnalyze.length + ' thành công.');
+  Logger.log('📧 Scheduled run: gửi digest cho ' + pendingResults.length + ' hợp đồng...');
+  sendDigestEmail(pendingResults, interval);
+  _markEmailSent(pendingResults.map(r => r.contractId));
+  Logger.log('✅ Scheduled run hoàn tất.');
 }
 
 // ── 5. Gọi Railway backend ────────────────────────────────────────────────────
@@ -244,8 +223,8 @@ function writeResult(contractId, result) {
 
   if (!sheet) {
     sheet = ss.insertSheet(RESULTS_SHEET);
-    sheet.appendRow(['Thời gian', 'Hợp đồng', 'Khuyến nghị', 'Confidence', 'Alerts', 'Crisis', 'Ghi chú DPA']);
-    sheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
+    sheet.appendRow(['Thời gian', 'Hợp đồng', 'Khuyến nghị', 'Confidence', 'Alerts', 'Crisis', 'Ghi chú DPA', 'email_sent']);
+    sheet.getRange(1, 1, 1, 8).setFontWeight('bold').setBackground('#1e3a5f').setFontColor('#ffffff');
     sheet.setFrozenRows(1);
   }
 
@@ -256,11 +235,12 @@ function writeResult(contractId, result) {
   const crisis     = result?.zone_workflow?.crisis_layer?.active ? '⚠ CÓ' : 'Không';
   const note       = (result?.zone_decision?.three_reasons || []).slice(0, 2).join(' | ');
 
-  sheet.appendRow([new Date().toLocaleString('vi-VN'), contractId, rec, confidence, alerts, crisis, note]);
+  // email_sent để trống — runScheduled sẽ điền timestamp sau khi gửi digest
+  sheet.appendRow([new Date().toLocaleString('vi-VN'), contractId, rec, confidence, alerts, crisis, note, '']);
 
   const lastRow = sheet.getLastRow();
   const color   = rec === 'KY' ? '#e6f4ea' : rec === 'KHONG_KY' ? '#fce8e6' : '#fff8e1';
-  sheet.getRange(lastRow, 1, 1, 7).setBackground(color);
+  sheet.getRange(lastRow, 1, 1, 8).setBackground(color);
 }
 
 // ── 7. Email: gửi riêng (khi thêm mới) ───────────────────────────────────────
@@ -447,6 +427,76 @@ function _makeToken(contractId, action) {
   const raw   = contractId + ':' + action + ':' + DECISION_SECRET;
   const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw, Utilities.Charset.UTF_8);
   return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+}
+
+// Lấy danh sách kết quả từ AI_RESULTS chưa gửi email (email_sent trống)
+function _getPendingEmailResults() {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(RESULTS_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  const data    = sheet.getDataRange().getValues();
+  const header  = data[0].map(h => String(h).toLowerCase().trim());
+  const cidIdx  = header.indexOf('hợp đồng');
+  const sentIdx = header.indexOf('email_sent');
+  if (cidIdx < 0 || sentIdx < 0) return [];
+
+  // Gom theo contractId, ưu tiên hàng cuối cùng (mới nhất)
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const cid  = String(data[i][cidIdx] || '').trim();
+    const sent = String(data[i][sentIdx] || '').trim();
+    if (!cid) continue;
+    if (sent === '') map[cid] = i; // chưa gửi → ghi nhớ row index
+  }
+
+  const pending = [];
+  for (const [contractId, rowIdx] of Object.entries(map)) {
+    const row = data[rowIdx];
+    // Tái tạo result object tối giản để sendDigestEmail dùng được
+    const rec        = String(row[header.indexOf('khuyến nghị')] || '');
+    const confidence = String(row[header.indexOf('confidence')]  || '');
+    const alerts     = Number(row[header.indexOf('alerts')]      || 0);
+    const crisis     = String(row[header.indexOf('crisis')]      || '').includes('CÓ');
+    const note       = String(row[header.indexOf('ghi chú dpa')] || '');
+    pending.push({
+      contractId,
+      rowNum: rowIdx + 1, // 1-indexed for sheet
+      result: {
+        zone_decision: {
+          recommendation:   rec,
+          confidence_score: parseFloat(confidence) / 100 || 0,
+          risk_alerts:      Array(alerts).fill('alert'),
+          three_reasons:    note ? note.split(' | ') : [],
+        },
+        zone_workflow: { crisis_layer: { active: crisis } },
+      },
+    });
+  }
+  return pending;
+}
+
+// Đánh dấu email_sent = timestamp cho các contractId đã gửi
+function _markEmailSent(contractIds) {
+  const ss    = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName(RESULTS_SHEET);
+  if (!sheet) return;
+
+  const data    = sheet.getDataRange().getValues();
+  const header  = data[0].map(h => String(h).toLowerCase().trim());
+  const cidIdx  = header.indexOf('hợp đồng');
+  const sentIdx = header.indexOf('email_sent');
+  if (cidIdx < 0 || sentIdx < 0) return;
+
+  const idSet = new Set(contractIds);
+  const now   = new Date().toLocaleString('vi-VN');
+  for (let i = 1; i < data.length; i++) {
+    const cid  = String(data[i][cidIdx] || '').trim();
+    const sent = String(data[i][sentIdx] || '').trim();
+    if (idSet.has(cid) && sent === '') {
+      sheet.getRange(i + 1, sentIdx + 1).setValue(now);
+    }
+  }
 }
 
 // Đọc interval hiện tại từ Railway, fallback PropertiesService
