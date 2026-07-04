@@ -22,8 +22,10 @@ export function Settings() {
   const [emails, setEmails] = useState<string[]>(['tanhtlb23411@st.uel.edu.vn']);
   const [newEmail, setNewEmail] = useState('');
   const [schedule, setSchedule] = useState(localStorage.getItem('schedule') || 'off');
+  const [appsScriptUrl, setAppsScriptUrl] = useState(localStorage.getItem('apps_script_url') || '');
   const [schedSaving, setSchedSaving] = useState(false);
   const [schedSaved, setSchedSaved] = useState(false);
+  const [schedError, setSchedError] = useState('');
   const [savedSchedule, setSavedSchedule] = useState(localStorage.getItem('schedule') || 'off');
   const [saved, setSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
@@ -44,10 +46,19 @@ export function Settings() {
 
   async function saveSchedule() {
     setSchedSaving(true);
+    setSchedError('');
     try {
-      await axios.post(`${API_BASE}/set-schedule`, { interval: schedule });
+      const res = await axios.post(`${API_BASE}/set-schedule`, {
+        interval: schedule,
+        apps_script_url: appsScriptUrl,
+      });
+      const appsResult = res.data?.apps_script;
+      if (appsResult?.error) {
+        setSchedError('Không thể gọi Apps Script: ' + JSON.stringify(appsResult.error));
+      }
     } catch {/* offline ok */}
     localStorage.setItem('schedule', schedule);
+    localStorage.setItem('apps_script_url', appsScriptUrl);
     setSavedSchedule(schedule);
     setSchedSaved(true);
     setTimeout(() => setSchedSaved(false), 2000);
@@ -176,6 +187,26 @@ export function Settings() {
               Hệ thống sẽ tự phân tích tất cả hợp đồng chưa được phân tích trong khoảng thời gian này và gửi email digest tổng hợp.
             </p>
           </div>
+          {/* Apps Script Web App URL — chỉ cần paste 1 lần */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+              Apps Script Web App URL
+              <span className="ml-1.5 font-normal text-slate-400">(paste 1 lần, hệ thống tự cập nhật lịch)</span>
+            </label>
+            <input
+              type="text"
+              value={appsScriptUrl}
+              onChange={e => setAppsScriptUrl(e.target.value)}
+              placeholder="https://script.google.com/macros/s/…/exec"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-600"
+            />
+            {!appsScriptUrl && (
+              <p className="text-xs text-amber-600 mt-1">
+                Chưa có URL → Mở Apps Script → Deploy → New deployment → Web App → Copy URL dán vào đây
+              </p>
+            )}
+          </div>
+
           <button
             onClick={saveSchedule}
             disabled={schedSaving}
@@ -189,6 +220,10 @@ export function Settings() {
           </button>
 
           {/* Luôn hiển thị khi đã lưu lịch có giá trị */}
+          {schedError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{schedError}</p>
+          )}
+
           {savedSchedule !== 'off' && (
             <div className="text-xs bg-green-50 border border-green-200 rounded-lg px-4 py-3 space-y-1.5">
               <p className="font-semibold text-green-800">

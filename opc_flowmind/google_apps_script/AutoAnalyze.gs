@@ -455,7 +455,30 @@ function _getRecentlyAnalyzedIds(windowMs) {
   return ids;
 }
 
-// ── 10. Hàm tiện ích (chạy thủ công từ editor) ───────────────────────────────
+// ── 10. Web App endpoint — Railway gọi để cập nhật lịch tự động ──────────────
+
+/**
+ * Deploy as Web App (Execute as: Me, Access: Anyone) để Railway có thể gọi.
+ * URL dạng: https://script.google.com/macros/s/XXXX/exec?interval=every30min
+ */
+function doGet(e) {
+  const interval = (e && e.parameter && e.parameter.interval) ? e.parameter.interval : 'off';
+  const valid    = ['off', 'every30min', 'every1h', 'every2h', 'every4h', 'daily8am'];
+
+  if (valid.indexOf(interval) < 0) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: 'interval không hợp lệ: ' + interval })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  setupScheduledTrigger(interval);
+
+  return ContentService.createTextOutput(
+    JSON.stringify({ status: 'ok', interval: interval })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ── 11. Hàm tiện ích (chạy thủ công từ editor) ───────────────────────────────
 
 /** Test phân tích 1 hợp đồng */
 function manualAnalyze() {

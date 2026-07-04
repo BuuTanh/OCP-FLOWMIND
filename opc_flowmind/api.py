@@ -398,13 +398,35 @@ h2{{color:#c0392b;margin:0 0 12px}}p{{color:#666;font-size:15px}}</style>
 
 @app.post("/set-schedule")
 def set_schedule(body: dict):
-    """Lưu interval lịch chạy định kỳ. Apps Script đọc từ đây qua /get-schedule."""
-    interval = body.get("interval", "off")
+    """Lưu interval + tự gọi Apps Script Web App để cài trigger."""
+    import requests as _req
+    interval          = body.get("interval", "off")
+    apps_script_url   = body.get("apps_script_url", "")  # frontend truyền URL vào
+
     if interval not in _VALID_INTERVALS:
         return {"status": "error", "message": f"interval không hợp lệ: {interval}"}
-    # Lưu vào in-memory (đủ dùng — Apps Script đọc khi cần)
+
     app.state.schedule_interval = interval
-    return {"status": "ok", "interval": interval}
+
+    # Gọi Apps Script Web App để tự động cài trigger
+    apps_script_result = None
+    if apps_script_url:
+        try:
+            r = _req.get(
+                apps_script_url,
+                params={"interval": interval},
+                timeout=15,
+                allow_redirects=True,
+            )
+            apps_script_result = r.json() if r.status_code == 200 else {"error": r.status_code}
+        except Exception as e:
+            apps_script_result = {"error": str(e)}
+
+    return {
+        "status":           "ok",
+        "interval":         interval,
+        "apps_script":      apps_script_result,
+    }
 
 
 @app.get("/get-schedule")
