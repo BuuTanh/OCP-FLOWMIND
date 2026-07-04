@@ -11,9 +11,13 @@ import type { ContractDecision } from '../context/AppContext';
 
 const CONTRACTS_FALLBACK = ['CON-001', 'CON-002', 'CON-003', 'CON-004', 'CON-005'];
 
-// Render markdown-lite: **bold**, numbered paragraphs, line breaks
-function renderMd(text: string) {
-  return text.split('\n').filter(l => l.trim()).map((line, i) => {
+// Render markdown-lite: **bold**, bullet lines (- …), line breaks
+function renderMd(text: string, invert = false) {
+  const baseText = invert ? 'text-current' : 'text-slate-700';
+  const mutedText = invert ? 'text-current opacity-80' : 'text-slate-500';
+  const lines = text.split('\n').filter(l => l.trim());
+
+  function parseBold(line: string) {
     const parts: React.ReactNode[] = [];
     let last = 0;
     const re = /\*\*(.+?)\*\*/g;
@@ -24,8 +28,41 @@ function renderMd(text: string) {
       last = m.index + m[0].length;
     }
     if (last < line.length) parts.push(line.slice(last));
-    return <p key={i} className="mt-2 first:mt-0">{parts}</p>;
+    return parts;
+  }
+
+  const nodes: React.ReactNode[] = [];
+  let bulletBuf: string[] = [];
+
+  function flushBullets(key: number) {
+    if (!bulletBuf.length) return;
+    nodes.push(
+      <ul key={`ul-${key}`} className="mt-3 space-y-1 pl-4">
+        {bulletBuf.map((b, bi) => (
+          <li key={bi} className={`flex gap-2 text-sm ${baseText}`}>
+            <span className={`mt-1.5 w-1.5 h-1.5 rounded-full bg-current shrink-0 ${mutedText}`} />
+            <span>{parseBold(b)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+    bulletBuf = [];
+  }
+
+  lines.forEach((line, i) => {
+    if (/^[-•]\s/.test(line)) {
+      bulletBuf.push(line.replace(/^[-•]\s/, ''));
+    } else {
+      flushBullets(i);
+      nodes.push(
+        <p key={i} className={`mt-3 first:mt-0 text-sm leading-relaxed ${baseText}`}>
+          {parseBold(line)}
+        </p>
+      );
+    }
   });
+  flushBullets(lines.length);
+  return nodes;
 }
 
 const REC_LABELS: Record<string, string> = {
@@ -497,10 +534,8 @@ function StepCard({ step, expanded, onToggle }: { step: { agent: string; status:
         {expanded ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
       </button>
       {expanded && (
-        <div className="px-5 py-4 text-sm text-slate-600 bg-white whitespace-pre-line leading-relaxed">
-          <div className="text-sm leading-relaxed text-slate-700">
-            {renderMd(step.summary || 'Không có thông tin chi tiết.')}
-          </div>
+        <div className="px-5 pt-4 pb-5 bg-white border-t border-slate-100">
+          {renderMd(step.summary || 'Không có thông tin chi tiết.')}
         </div>
       )}
     </div>
@@ -974,7 +1009,7 @@ export function Pipeline() {
             <div className="text-sm mt-1 opacity-80">Confidence: {(decision.confidence_score * 100).toFixed(0)}%</div>
             {decision.narrative && (
               <div className="text-sm mt-3 leading-relaxed opacity-90 border-t border-current/20 pt-3">
-                {renderMd(decision.narrative)}
+                {renderMd(decision.narrative, true)}
               </div>
             )}
           </div>
