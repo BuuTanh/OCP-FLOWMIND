@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Play, CheckCircle, AlertTriangle, Loader, ChevronDown, ChevronUp,
          XCircle, Clock, FileCheck, Banknote, X, ArrowRight, User, Target, Database, History,
          PenLine, ThumbsDown, ClipboardList, RotateCcw } from 'lucide-react';
@@ -494,6 +495,17 @@ export function Pipeline() {
           addNotification, runLog, addRunEntry, runResults, addRunResult,
           contractDecisions, saveDecision, clearDecision } = useApp();
   const { runAnalysis } = useApi();
+  const location = useLocation();
+
+  // Đọc ?contract=CON-XXX từ URL (gửi từ email link)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cid = params.get('contract');
+    if (!cid) return;
+    setSelectedContract(cid);
+    const hist = analysisHistory[cid];
+    if (hist) setLastResult(hist);
+  }, [location.search]);
 
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([0]));
   const [error, setError] = useState<string | null>(null);

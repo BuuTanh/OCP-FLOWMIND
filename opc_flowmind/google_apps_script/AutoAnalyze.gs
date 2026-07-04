@@ -197,7 +197,7 @@ function sendSuccessEmail(contractId, result) {
     </table>
     ${reasons ? `<div style="margin-top:16px"><strong>Lý do chính:</strong><ul style="margin-top:8px">${reasons}</ul></div>` : ''}
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee">
-      <a href="https://ocpflowmind-ten.vercel.app" style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
+      <a href="https://ocpflowmind-ten.vercel.app/pipeline?contract=${contractId}" style="background:#1e3a5f;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">
         Xem chi tiết trên Dashboard →
       </a>
     </div>
