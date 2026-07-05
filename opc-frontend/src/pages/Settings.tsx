@@ -16,10 +16,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function Settings() {
-  const NOTIFY_EMAIL = 'tanhtlb23411@st.uel.edu.vn';
   const [sheetId, setSheetId] = useState(localStorage.getItem('gsheet_id') || '11ehIbSy2Aw9KPjXrN0XN90wQ5BPx613m3beZRYji7qI');
   const [apiKey] = useState(localStorage.getItem('openai_key') || '');
-  const [emails, setEmails] = useState<string[]>(['tanhtlb23411@st.uel.edu.vn']);
+  const [emails, setEmails] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('notify_emails') || '[]'); } catch { return []; }
+  });
   const [newEmail, setNewEmail] = useState('');
   const [schedule, setSchedule] = useState(localStorage.getItem('schedule') || 'off');
   const [appsScriptUrl, setAppsScriptUrl] = useState(localStorage.getItem('apps_script_url') || '');
@@ -41,6 +42,7 @@ export function Settings() {
     localStorage.setItem('gsheet_id', sheetId);
     localStorage.setItem('openai_key', apiKey);
     localStorage.setItem('schedule', schedule);
+    localStorage.setItem('notify_emails', JSON.stringify(emails));
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
@@ -52,11 +54,13 @@ export function Settings() {
       await axios.post(`${API_BASE}/set-schedule`, {
         interval: schedule,
         apps_script_url: appsScriptUrl,
+        emails: emails,
       });
       // Apps Script call is best-effort; don't block user on failure
     } catch {/* offline ok */}
     localStorage.setItem('schedule', schedule);
     localStorage.setItem('apps_script_url', appsScriptUrl);
+    localStorage.setItem('notify_emails', JSON.stringify(emails));
     setSavedSchedule(schedule);
     setSchedSaved(true);
     setTimeout(() => setSchedSaved(false), 2000);
@@ -278,7 +282,7 @@ export function Settings() {
                 }</span>
               </p>
               <p className="text-green-700">
-                Kết quả phân tích và cảnh báo rủi ro sẽ được gửi về <strong>{NOTIFY_EMAIL}</strong>.
+                Kết quả phân tích và cảnh báo rủi ro sẽ được gửi về <strong>{emails.join(', ') || '(chưa có email)'}</strong>.
               </p>
             </div>
           )}

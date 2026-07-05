@@ -15,7 +15,7 @@
 const RAILWAY_URL      = 'https://ocp-flowmind-production.up.railway.app';
 const CONTRACTS_SHEET  = '04_CONTRACTS';
 const RESULTS_SHEET    = 'AI_RESULTS';
-const NOTIFY_EMAIL     = 'tanhtlb23411@st.uel.edu.vn';
+const NOTIFY_EMAIL_FALLBACK = 'tanhtlb23411@st.uel.edu.vn'; // dùng nếu chưa lưu email nào
 const DECISION_SECRET  = 'opc-flowmind-2024';
 
 // Tên các cột bắt buộc trước khi phân tích
@@ -330,7 +330,7 @@ function sendSingleEmail(contractId, result) {
 </div>`;
 
   MailApp.sendEmail({
-    to: NOTIFY_EMAIL,
+    to: _getNotifyEmails(),
     subject: `[OPC FlowMind] ${contractId} → ${recLabel} (${confidence}) — Cần Founder xét duyệt`,
     htmlBody: html,
   });
@@ -403,7 +403,7 @@ function sendDigestEmail(results, interval) {
     ? `[OPC FlowMind] ⚠ ${needAction} hợp đồng cần chú ý — Báo cáo ${intervalLabel}`
     : `[OPC FlowMind] ✅ Báo cáo định kỳ — ${results.length} hợp đồng OK`;
 
-  MailApp.sendEmail({ to: NOTIFY_EMAIL, subject, htmlBody: html });
+  MailApp.sendEmail({ to: _getNotifyEmails(), subject, htmlBody: html });
 }
 
 // ── 9. Helpers ────────────────────────────────────────────────────────────────
@@ -588,11 +588,24 @@ function doGet(e) {
     ).setMimeType(ContentService.MimeType.JSON);
   }
 
+  // Lưu emails nếu có
+  const emailsParam = (e && e.parameter && e.parameter.emails) ? e.parameter.emails : '';
+  if (emailsParam) {
+    PropertiesService.getScriptProperties().setProperty('NOTIFY_EMAILS', emailsParam);
+  }
+
   setupScheduledTrigger(interval);
 
   return ContentService.createTextOutput(
-    JSON.stringify({ status: 'ok', interval: interval })
+    JSON.stringify({ status: 'ok', interval: interval, emails_saved: !!emailsParam })
   ).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Trả về danh sách email nhận thông báo (từ PropertiesService hoặc fallback)
+function _getNotifyEmails() {
+  const saved = PropertiesService.getScriptProperties().getProperty('NOTIFY_EMAILS') || '';
+  if (saved) return saved; // "a@x.com,b@y.com"
+  return NOTIFY_EMAIL_FALLBACK;
 }
 
 function _handleWriteDecision(params) {

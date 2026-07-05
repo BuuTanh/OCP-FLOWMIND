@@ -420,10 +420,11 @@ h2{{color:#c0392b;margin:0 0 12px}}p{{color:#666;font-size:15px}}</style>
 
 @app.post("/set-schedule")
 def set_schedule(body: dict):
-    """Lưu interval + tự gọi Apps Script Web App để cài trigger."""
+    """Lưu interval + emails + tự gọi Apps Script Web App để cài trigger."""
     import requests as _req
     interval          = body.get("interval", "off")
-    apps_script_url   = body.get("apps_script_url", "")  # frontend truyền URL vào
+    apps_script_url   = body.get("apps_script_url", "")
+    emails            = body.get("emails", [])  # list email từ frontend
 
     if interval not in _VALID_INTERVALS:
         return {"status": "error", "message": f"interval không hợp lệ: {interval}"}
@@ -431,14 +432,19 @@ def set_schedule(body: dict):
     app.state.schedule_interval = interval
     if apps_script_url:
         app.state.apps_script_url = apps_script_url
+    if emails:
+        app.state.notify_emails = emails
 
-    # Gọi Apps Script Web App để tự động cài trigger
+    # Gọi Apps Script Web App để tự động cài trigger + lưu emails
     apps_script_result = None
     if apps_script_url:
+        params = {"interval": interval}
+        if emails:
+            params["emails"] = ",".join(emails)
         try:
             r = _req.get(
                 apps_script_url,
-                params={"interval": interval},
+                params=params,
                 timeout=15,
                 allow_redirects=True,
             )
