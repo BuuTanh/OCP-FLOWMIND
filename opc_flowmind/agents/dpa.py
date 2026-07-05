@@ -57,11 +57,16 @@ class DecisionPartnerAgent(BaseAgent):
             if match:
                 raw: dict = json.loads(match.group())
                 # Loại bỏ các item đã được Founder giải quyết
+                # Key từ frontend có dạng "CR-001::item text" — strip prefix trước khi match
+                resolved_texts = [
+                    r.split("::", 1)[-1].lower() if "::" in r else r.lower()
+                    for r in resolved_credit_items
+                ]
                 result = {}
                 for cr_id, items in raw.items():
                     remaining = [
                         item for item in (items if isinstance(items, list) else [])
-                        if not any(r.lower() in item.lower() for r in resolved_credit_items)
+                        if not any(rt in item.lower() for rt in resolved_texts)
                     ]
                     result[cr_id] = remaining
                 return result
