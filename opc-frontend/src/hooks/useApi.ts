@@ -33,6 +33,11 @@ export function useApi() {
     return data;
   }
 
+  async function getReceivables(): Promise<{ open_vnd: number; pipeline_vnd: number }> {
+    const { data } = await client.get('/receivables');
+    return data;
+  }
+
   function getSheetId(): string {
     return localStorage.getItem('gsheet_id') || '';
   }
@@ -45,5 +50,5 @@ export function useApi() {
     await client.post('/memory/invalidate');
   }
 
-  return { runAnalysis, getContracts, getCashflow, getAlerts, getSheetId, getApiKey, reloadCache };
+  return { runAnalysis, getContracts, getCashflow, getAlerts, getReceivables, getSheetId, getApiKey, reloadCache };
 }

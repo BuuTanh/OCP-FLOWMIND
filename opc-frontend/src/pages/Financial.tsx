@@ -43,18 +43,20 @@ const CustomTooltip = ({ active, payload, label }: {
 
 export function Financial() {
   const { lastResult } = useApp();
-  const { getCashflow } = useApi();
+  const { getCashflow, getReceivables } = useApi();
 
   const [cashflow, setCashflow] = useState<CashflowMonth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [receivablesData, setReceivablesData] = useState<{ open_vnd: number; pipeline_vnd: number } | null>(null);
 
   async function loadCashflow() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getCashflow();
-      setCashflow(data);
+      const [cfData, recData] = await Promise.all([getCashflow(), getReceivables()]);
+      setCashflow(cfData);
+      setReceivablesData(recData);
     } catch (e) {
       setError('Không thể tải dữ liệu cashflow — đảm bảo backend đang chạy');
     } finally {
@@ -69,9 +71,9 @@ export function Financial() {
     ? lastResult.zone_input.cashflow_chart
     : cashflow;
 
-  const receivables = lastResult?.zone_input.receivables;
-  const openReceivables = receivables?.open_vnd ?? 0;
-  const pipelineReceivables = receivables?.pipeline_vnd ?? 0;
+  // Receivables: ưu tiên dữ liệu trực tiếp từ API, fallback về lastResult nếu có
+  const openReceivables = receivablesData?.open_vnd ?? lastResult?.zone_input.receivables?.open_vnd ?? 0;
+  const pipelineReceivables = receivablesData?.pipeline_vnd ?? lastResult?.zone_input.receivables?.pipeline_vnd ?? 0;
   const criticalMonths = displayCashflow.filter(c => c.status === 'CRITICAL').length;
   const warningMonths = displayCashflow.filter(c => c.status === 'WARNING').length;
 
@@ -88,15 +90,15 @@ export function Financial() {
         />
         <KpiCard
           label="Công nợ mở (Open AR)"
-          value={openReceivables ? formatM(openReceivables) : '—'}
-          sub={openReceivables ? 'Chưa thu được' : 'Chạy phân tích để cập nhật'}
+          value={loading ? '…' : openReceivables ? formatM(openReceivables) : '—'}
+          sub={loading ? 'Đang tải…' : openReceivables ? 'Tổng hóa đơn chưa thu' : 'Không có công nợ mở'}
           icon={TrendingDown}
           iconColor="text-red-500"
         />
         <KpiCard
           label="Pipeline chưa xuất HĐ"
-          value={pipelineReceivables ? formatM(pipelineReceivables) : '—'}
-          sub={pipelineReceivables ? 'Đơn hàng pending' : 'Chạy phân tích để cập nhật'}
+          value={loading ? '…' : pipelineReceivables ? formatM(pipelineReceivables) : '—'}
+          sub={loading ? 'Đang tải…' : pipelineReceivables ? 'Hóa đơn chưa phát hành' : 'Không có pipeline pending'}
           icon={TrendingUp}
           iconColor="text-amber-500"
         />

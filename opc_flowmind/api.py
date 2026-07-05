@@ -279,6 +279,26 @@ def get_cashflow(contract_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/receivables")
+def get_receivables():
+    """Tổng công nợ mở (Open AR) và pipeline chưa xuất HĐ từ Google Sheets."""
+    try:
+        invoices = gsheet_loader.get_invoices()
+        open_vnd = sum(
+            _safe_float(inv.get("invoice_amount", 0))
+            for inv in invoices
+            if inv.get("status") == "Open"
+        )
+        pipeline_vnd = sum(
+            _safe_float(inv.get("invoice_amount", 0))
+            for inv in invoices
+            if inv.get("status") == "Not issued"
+        )
+        return {"open_vnd": open_vnd, "pipeline_vnd": pipeline_vnd}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/alerts")
 def get_alerts():
     """Risk alerts hiện tại."""
