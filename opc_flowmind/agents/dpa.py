@@ -187,6 +187,10 @@ class DecisionPartnerAgent(BaseAgent):
                     requires_human_approval=True
                 ))
 
+        margin_ok        = financial.gross_margin_ok
+        gross_margin     = financial.gross_margin_actual
+        funding_gap      = financial.total_funding_gap_3m
+
         # CR factor: eligibility trung bình của options, hoặc CR[0] nếu bị block, hoặc 0.45 nếu không có CR
         cr_base = (
             round(sum(o.eligibility_score for o in bank_options) / len(bank_options), 2)
@@ -216,9 +220,6 @@ class DecisionPartnerAgent(BaseAgent):
             )
         else:
             has_critical = (risk.overall_risk_level == "Critical")
-        margin_ok        = financial.gross_margin_ok
-        gross_margin     = financial.gross_margin_actual
-        funding_gap      = financial.total_funding_gap_3m
         contract_value   = float(target_contract.get("contract_value", 0))
         # Gap/Value ratio: nếu cần vay > 30% giá trị hợp đồng thì rủi ro cao
         gap_ratio        = (funding_gap / contract_value) if contract_value > 0 else 0
