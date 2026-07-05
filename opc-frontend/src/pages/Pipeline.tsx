@@ -586,39 +586,37 @@ export function Pipeline() {
   }, []);
 
   // Đọc ?contract=CON-XXX từ URL (gửi từ email link)
-  // Nếu chưa có kết quả trong localStorage → tự chạy phân tích
+  // Luôn chạy lại phân tích mới nhất khi vào từ email — không dùng cache cũ
   const [autoRunDone, setAutoRunDone] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const cid = params.get('contract');
     if (!cid || autoRunDone) return;
+    setAutoRunDone(true);
     setSelectedContract(cid);
-    const hist = analysisHistory[cid];
-    if (hist) {
-      setLastResult(hist);
-    } else {
-      // Chưa có kết quả → tự động chạy phân tích
-      setAutoRunDone(true);
-      setIsRunning(true);
-      runAnalysis(cid, false, [])
-        .then(data => {
-          setLastResult(data);
-          setAnalysisHistory(h => ({ ...h, [cid]: data }));
-          const rec = data.zone_decision?.recommendation ?? '';
-          const alerts = data.zone_decision?.risk_alerts ?? [];
-          const runId = addRunEntry({
-            contractId: cid,
-            timestamp: new Date().toISOString(),
-            recommendation: rec,
-            confidence: data.zone_decision?.confidence_score ?? 0,
-            alertCount: alerts.length,
-            resolvedCount: 0,
-          });
-          addRunResult(runId, data);
-        })
-        .catch(() => {})
-        .finally(() => setIsRunning(false));
-    }
+    setIsRunning(true);
+    setError(null);
+    runAnalysis(cid, false, [])
+      .then(data => {
+        setLastResult(data);
+        setAnalysisHistory(h => ({ ...h, [cid]: data }));
+        const rec = data.zone_decision?.recommendation ?? '';
+        const alerts = data.zone_decision?.risk_alerts ?? [];
+        const runId = addRunEntry({
+          contractId: cid,
+          timestamp: new Date().toISOString(),
+          recommendation: rec,
+          confidence: data.zone_decision?.confidence_score ?? 0,
+          alertCount: alerts.length,
+          resolvedCount: 0,
+        });
+        addRunResult(runId, data);
+      })
+      .catch(e => {
+        const msg = e instanceof Error ? e.message : 'Lỗi kết nối backend';
+        setError(msg);
+      })
+      .finally(() => setIsRunning(false));
   }, [location.search]);
 
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set([0]));
