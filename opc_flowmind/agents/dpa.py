@@ -95,11 +95,26 @@ class DecisionPartnerAgent(BaseAgent):
 
         # Lọc credit profiles phù hợp với hợp đồng đang phân tích:
         # - CR có đề cập contract_id cụ thể → chỉ dùng khi đúng contract
-        # - CR không đề cập contract cụ thể (general) → dùng cho tất cả
+        # - CR không gắn contract cụ thể → chỉ include khi request_type phù hợp nhu cầu contract
+        contract_value_f = float(target_contract.get("contract_value", 0))
+
         def _cr_relevant(cr: dict) -> bool:
             basis = cr.get("collateral_or_basis", "")
             linked = re.findall(r'CON-\d+', basis)
-            return (not linked) or (contract_id in linked)
+            if linked:
+                return contract_id in linked
+            # CR toàn cục: kiểm tra request_type có phù hợp với payment_terms/contract không
+            req = cr.get("request_type", "").lower()
+            pt  = payment_terms_lower
+            if "performance bond" in req:
+                return "performance bond" in pt
+            if "trade finance" in req or "lc support" in req:
+                return "lc" in pt or "trade finance" in pt
+            if "micro" in req:
+                return contract_value_f < 1_000_000_000
+            if "working capital" in req:
+                return True  # working capital chung → luôn liên quan
+            return False  # loại không xác định → bỏ qua
 
         relevant_credit_profiles = [cr for cr in credit_profiles if _cr_relevant(cr)]
 
