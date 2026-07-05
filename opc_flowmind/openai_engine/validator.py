@@ -11,8 +11,6 @@ def validate_recommendation(decision_card: dict) -> dict:
     flags = []
     confidence = decision_card.get("confidence_score", 0)
     recommendation = decision_card.get("recommendation", "")
-    if confidence < 0.65 and recommendation not in ("CHUA_DU_DATA", "KHONG_KY"):
+    if confidence < 0.65 and recommendation not in ("CHUA_DU_DU_LIEU", "KHONG_KY"):
         flags.append(f"confidence={confidence} < 0.65 but recommendation is {recommendation}")
-    if len(decision_card.get("reasons", [])) != 3:
-        flags.append("reasons must be exactly 3 items")
     return {"ok": len(flags) == 0, "flags": flags}

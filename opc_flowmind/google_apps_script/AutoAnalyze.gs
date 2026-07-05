@@ -249,8 +249,8 @@ function sendSingleEmail(contractId, result) {
   const mdToHtml = s => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
   const reasons    = (result?.zone_decision?.three_reasons || [])
                      .map((r, i) => `<li style="margin-bottom:6px">${i+1}. ${mdToHtml(r)}</li>`).join('');
-  const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : '#e67e22';
-  const recLabel   = rec === 'KY' ? '✅ KÝ HỢP ĐỒNG' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : '⚠ KÝ CÓ ĐIỀU KIỆN';
+  const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : rec === 'CHUA_DU_DU_LIEU' ? '#7f8c8d' : '#e67e22';
+  const recLabel   = rec === 'KY' ? '✅ KÝ HỢP ĐỒNG' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : rec === 'CHUA_DU_DU_LIEU' ? '⏳ CHƯA ĐỦ DỮ LIỆU' : '⚠ KÝ CÓ ĐIỀU KIỆN';
 
   // Tạo token cho từng nút quyết định
   const tokenKy      = _makeToken(contractId, 'KY');
@@ -350,8 +350,8 @@ function sendDigestEmail(results, interval) {
                        ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%' : '—';
     const alerts     = (result?.zone_decision?.risk_alerts || []).length;
     const crisis     = result?.zone_workflow?.crisis_layer?.active;
-    const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : '#e67e22';
-    const recLabel   = rec === 'KY' ? '✅ KÝ' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : '⚠ CÓ ĐK';
+    const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : rec === 'CHUA_DU_DU_LIEU' ? '#7f8c8d' : '#e67e22';
+    const recLabel   = rec === 'KY' ? '✅ KÝ' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : rec === 'CHUA_DU_DU_LIEU' ? '⏳ CHƯA ĐỦ DL' : '⚠ CÓ ĐK';
     const link       = `https://ocpflowmind-ten.vercel.app/pipeline?contract=${contractId}`;
     return `
       <tr>
