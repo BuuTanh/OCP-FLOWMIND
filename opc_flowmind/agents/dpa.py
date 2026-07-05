@@ -102,6 +102,8 @@ class DecisionPartnerAgent(BaseAgent):
         # Lọc credit profiles phù hợp với hợp đồng đang phân tích:
         # - CR có đề cập contract_id cụ thể → chỉ dùng khi đúng contract
         # - CR không gắn contract cụ thể → chỉ include khi request_type phù hợp nhu cầu contract
+        has_funding_gap = financial.total_funding_gap_3m > 0
+
         def _cr_relevant(cr: dict) -> bool:
             basis = cr.get("collateral_or_basis", "")
             linked = re.findall(r'CON-\d+', basis)
@@ -115,7 +117,8 @@ class DecisionPartnerAgent(BaseAgent):
             if "micro" in req:
                 return contract_value_f < 1_000_000_000
             if "working capital" in req:
-                return True
+                # Chỉ relevant khi hợp đồng thực sự có gap vốn lưu động
+                return has_funding_gap
             return False
 
         relevant_credit_profiles = [cr for cr in credit_profiles if _cr_relevant(cr)]
@@ -139,7 +142,7 @@ class DecisionPartnerAgent(BaseAgent):
                 "requested_amount": float(target_contract.get("contract_value", 0)) * 0.35,
                 "collateral_or_basis": f"{contract_id} documentation",
                 "eligibility_score": payment_reliability * 0.9,
-                "precheck_note": "Inferred from payment_terms — supplier docs required",
+                "precheck_note": "Inferred from payment_terms",
                 "approval_status": "Review",
             }]
 
@@ -184,12 +187,24 @@ class DecisionPartnerAgent(BaseAgent):
                     requires_human_approval=True
                 ))
 
-        # Overall confidence = trung bình eligibility_score của các CR options (đã tính penalty missing)
+        # CR factor: eligibility trung bình của options, hoặc CR[0] nếu bị block, hoặc 0.45 nếu không có CR
         cr_base = (
             round(sum(o.eligibility_score for o in bank_options) / len(bank_options), 2)
             if bank_options else (self._calc_confidence(relevant_credit_profiles[0], missing_detail) if relevant_credit_profiles else 0.45)
         )
-        overall_confidence = round(max(0.15, min(0.95, cr_base)), 2)
+
+        # Risk factor: mức độ rủi ro tổng thể ảnh hưởng đến độ tin cậy quyết định
+        _risk_score_map = {"Low": 1.00, "Medium": 0.75, "High": 0.45, "Critical": 0.20}
+        risk_factor = _risk_score_map.get(risk.overall_risk_level, 0.50)
+
+        # Margin factor: margin thực tế so với ngưỡng mục tiêu 28%
+        margin_factor = max(0.20, min(1.00, gross_margin / 0.28))
+
+        # Confidence đa nhân tố — không để CR score che đi rủi ro thực tế
+        overall_confidence = round(
+            max(0.15, min(0.95, 0.40 * cr_base + 0.35 * risk_factor + 0.25 * margin_factor)),
+            2
+        )
 
         # Khi founder đã xác nhận xử lý crisis (TXN), các TXN alert không còn block recommendation
         # Chỉ non-TXN critical alerts (nếu có) mới giữ has_critical=True
