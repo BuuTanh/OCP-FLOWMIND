@@ -75,7 +75,10 @@ class DecisionPartnerAgent(BaseAgent):
         return {}
 
     def _calc_confidence(self, credit_case: dict, missing_detail: dict[str, list]) -> float:
-        base = float(credit_case.get("eligibility_score", 0))
+        try:
+            base = float(str(credit_case.get("eligibility_score", 0)).replace(",", ".") or 0)
+        except (ValueError, TypeError):
+            base = 0.5
         n_missing = len(missing_detail.get(credit_case.get("credit_case_id", ""), []))
         return round(base * (1 - 0.15 * n_missing), 2)
 
@@ -231,15 +234,15 @@ class DecisionPartnerAgent(BaseAgent):
 
         has_actual_missing = any(len(v) > 0 for v in missing_detail.values())
 
-        if overall_confidence < CONFIDENCE_THRESHOLD and has_actual_missing:
+        if gross_margin < 0.10:
+            # Margin dưới 10%: ký lỗ — không có lý do kinh doanh để ký (hard rule, ưu tiên tuyệt đối)
+            recommendation = "KHONG_KY"
+        elif overall_confidence < CONFIDENCE_THRESHOLD and has_actual_missing:
             # Confidence thấp DO thiếu tài liệu thực sự → yêu cầu bổ sung
             recommendation = "CHUA_DU_DU_LIEU"
         elif overall_confidence < CONFIDENCE_THRESHOLD and not has_actual_missing:
             # Confidence thấp do rủi ro cao (Critical risk, low margin) — data đã đủ
             recommendation = "KY_CO_DIEU_KIEN"
-        elif gross_margin < 0.10:
-            # Margin dưới 10%: ký lỗ — không có lý do kinh doanh để ký
-            recommendation = "KHONG_KY"
         elif gap_ratio > 0.5 and not bank_options:
             # Gap vốn > 50% giá trị hợp đồng mà không xoay được vốn
             recommendation = "KHONG_KY"
