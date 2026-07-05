@@ -29,15 +29,27 @@ class DecisionPartnerAgent(BaseAgent):
             return {}
 
         system = (
-            "Bạn là trợ lý phân tích hồ sơ tín dụng. "
-            "Nhiệm vụ: liệt kê các hạng mục/điều kiện còn thiếu hoặc chưa hoàn thành "
-            "trong precheck_note của mỗi hồ sơ. Mỗi hạng mục là 1 chuỗi ngắn gọn. "
+            "Bạn là chuyên gia phân tích hồ sơ tín dụng. "
+            "Nhiệm vụ: đọc precheck_note của từng hồ sơ và CHỈ liệt kê những hạng mục "
+            "THỰC SỰ CÒN THIẾU hoặc CHƯA HOÀN THÀNH — tức là các tài liệu, bằng chứng, "
+            "xác nhận, hoặc điều kiện mà hồ sơ YÊU CẦU nhưng CHƯA CÓ.\n\n"
+            "KHÔNG liệt kê nếu note là:\n"
+            "- Nhận xét tích cực (VD: 'Good fit', 'Acceptable', 'Approved')\n"
+            "- Điều kiện tương lai chưa đến hạn (VD: 'Acceptable if contract signed')\n"
+            "- Ghi chú thông tin thuần túy không phải yêu cầu bổ sung\n\n"
+            "CHỈ liệt kê khi note rõ ràng chỉ ra thiếu sót: 'Missing', 'Need', 'Required', "
+            "'chưa có', 'cần bổ sung', hoặc tương đương.\n"
+            "Nếu không có hạng mục thiếu thực sự, trả về mảng rỗng [].\n"
             "Chỉ trả về JSON thuần, không giải thích."
         )
         user = (
-            f"Với mỗi hồ sơ dưới đây, liệt kê từng hạng mục còn thiếu:\n"
+            f"Phân tích các precheck_note sau và liệt kê TỪNG hạng mục THỰC SỰ CÒN THIẾU "
+            f"(tài liệu/bằng chứng/xác nhận chưa cung cấp):\n\n"
             f"{json.dumps(notes, ensure_ascii=False)}\n\n"
-            f"Trả về JSON dạng: {{\"CR-001\": [\"item A\", \"item B\"], \"CR-002\": [\"item C\"]}}"
+            f"Ví dụ đúng: 'Need receivable aging evidence' → ['Bằng chứng aging công nợ phải thu']\n"
+            f"Ví dụ sai (không liệt kê): 'Good fit for cooperative network pilot' → []\n"
+            f"Ví dụ sai (không liệt kê): 'Acceptable if contract signed' → []\n\n"
+            f"Trả về JSON: {{\"CR-001\": [\"hạng mục A\"], \"CR-002\": []}}"
         )
         try:
             result_text, _ = self.safe_openai_call(system, user)
