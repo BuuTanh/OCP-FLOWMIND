@@ -875,6 +875,13 @@ export function Pipeline() {
           <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 font-medium">
             <CheckCircle size={12} />
             {resolvedIds.size} mục đã xử lý — sẽ áp dụng khi chạy lại
+            <button
+              onClick={() => { setResolvedIds(new Set()); localStorage.removeItem(`checklist_resolved_${selectedContract}`); }}
+              className="ml-1 text-green-500 hover:text-red-500 transition-colors"
+              title="Xóa tất cả"
+            >
+              <X size={11} />
+            </button>
           </div>
         )}
 
