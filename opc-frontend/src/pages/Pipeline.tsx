@@ -702,9 +702,11 @@ export function Pipeline() {
 
   // Nếu đang xem lịch sử: ưu tiên full result của run đó, fallback về analysisHistory của contract đó
   const selectedEntry = selectedRunId ? runLog.find(e => e.id === selectedRunId) : null;
-  const result: AnalysisResult | undefined = selectedRunId
-    ? (runResults[selectedRunId] ?? (selectedEntry ? analysisHistory[selectedEntry.contractId] : undefined))
-    : analysisHistory[selectedContract];
+  const result: AnalysisResult | undefined = isRunning
+    ? undefined  // Đang chạy → không hiện kết quả cũ (tránh hiển thị data của contract khác)
+    : selectedRunId
+      ? (runResults[selectedRunId] ?? (selectedEntry ? analysisHistory[selectedEntry.contractId] : undefined))
+      : analysisHistory[selectedContract];
   const viewingHistorical = selectedRunId != null && result != null;
   const historicalEntry = viewingHistorical ? selectedEntry : null;
   // True only when we have the EXACT stored result for that run; false = fallback mode
