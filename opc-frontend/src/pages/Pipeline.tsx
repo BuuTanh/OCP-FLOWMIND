@@ -90,14 +90,16 @@ const REC_LABELS: Record<string, string> = {
   KY: '✅ KÝ HỢP ĐỒNG',
   KY_CO_DIEU_KIEN: '⚠️ KÝ CÓ ĐIỀU KIỆN',
   KHONG_KY: '❌ KHÔNG KÝ',
-  CHUA_DU_DATA: '❓ CHƯA ĐỦ DỮ LIỆU',
+  CHUA_DU_DATA: '⏳ CHƯA ĐỦ DỮ LIỆU',
+  CHUA_DU_DU_LIEU: '⏳ CHƯA ĐỦ DỮ LIỆU',
 };
 
 const REC_COLORS: Record<string, string> = {
   KY: 'bg-green-50 border-green-300 text-green-800',
   KY_CO_DIEU_KIEN: 'bg-amber-50 border-amber-300 text-amber-800',
   KHONG_KY: 'bg-red-50 border-red-300 text-red-800',
-  CHUA_DU_DATA: 'bg-gray-50 border-gray-300 text-gray-700',
+  CHUA_DU_DATA: 'bg-gray-50 border-gray-300 text-gray-600',
+  CHUA_DU_DU_LIEU: 'bg-gray-50 border-gray-300 text-gray-600',
 };
 
 // ── Popup detail content generator ──────────────────────────────────────────
@@ -779,9 +781,11 @@ export function Pipeline() {
     KY_CO_DIEU_KIEN: 'text-amber-600',
     KHONG_KY: 'text-red-600',
     CHUA_DU_DATA: 'text-slate-500',
+    CHUA_DU_DU_LIEU: 'text-slate-500',
   };
   const REC_SHORT: Record<string, string> = {
-    KY: '✅ KÝ', KY_CO_DIEU_KIEN: '⚠️ CÓ ĐK', KHONG_KY: '❌ KHÔNG KÝ', CHUA_DU_DATA: '❓ THIẾU DATA',
+    KY: '✅ KÝ', KY_CO_DIEU_KIEN: '⚠️ CÓ ĐK', KHONG_KY: '❌ KHÔNG KÝ',
+    CHUA_DU_DATA: '⏳ CHƯA ĐỦ DL', CHUA_DU_DU_LIEU: '⏳ CHƯA ĐỦ DL',
   };
 
   return (
@@ -1025,11 +1029,16 @@ export function Pipeline() {
       {/* Decision Card */}
       {decision && rec && (
         <div className="space-y-4">
-          <div className={`rounded-xl border-2 p-6 ${REC_COLORS[rec]}`}>
-            <div className="text-xl font-bold">{REC_LABELS[rec]}</div>
-            <div className="text-sm mt-1 opacity-80">Confidence: {(decision.confidence_score * 100).toFixed(0)}%</div>
+          <div className={`rounded-xl border-2 p-5 ${REC_COLORS[rec]}`}>
+            {/* Header: trạng thái + confidence */}
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+              <div className="text-2xl font-extrabold tracking-tight">{REC_LABELS[rec] ?? rec}</div>
+              <div className={`text-lg font-bold px-4 py-1 rounded-full border-2 ${REC_COLORS[rec]}`}>
+                Confidence: {(decision.confidence_score * 100).toFixed(0)}%
+              </div>
+            </div>
             {decision.narrative && (
-              <div className="text-sm mt-3 leading-relaxed opacity-90 border-t border-current/20 pt-3">
+              <div className="text-sm leading-relaxed opacity-90 border-t border-current/20 pt-3">
                 {renderMd(decision.narrative, true)}
               </div>
             )}
