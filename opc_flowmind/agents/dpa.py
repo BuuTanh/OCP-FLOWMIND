@@ -153,7 +153,7 @@ class DecisionPartnerAgent(BaseAgent):
         # Overall confidence = trung bình eligibility_score của các CR options (đã tính penalty missing)
         cr_base = (
             round(sum(o.eligibility_score for o in bank_options) / len(bank_options), 2)
-            if bank_options else (self._calc_confidence(relevant_credit_profiles[0]) if relevant_credit_profiles else 0.45)
+            if bank_options else (self._calc_confidence(relevant_credit_profiles[0], missing_map) if relevant_credit_profiles else 0.45)
         )
         overall_confidence = round(max(0.15, min(0.95, cr_base)), 2)
 
