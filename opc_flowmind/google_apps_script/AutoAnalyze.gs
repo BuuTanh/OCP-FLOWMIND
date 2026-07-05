@@ -212,7 +212,6 @@ function runAnalysis(contractId) {
     return null;
   }
 
-  writeResult(contractId, result);
   return result;
 }
 
@@ -465,9 +464,15 @@ function _getPendingEmailResults() {
     const row = data[rowIdx];
     // Tái tạo result object tối giản để sendDigestEmail dùng được
     const rec        = String(row[header.indexOf('khuyến nghị')] || '');
-    const confRaw    = row[header.indexOf('confidence')];
-    // Sheets lưu "64%" thành số 0.64 — nhân 100 để ra confidence_score đúng
-    const confNum    = typeof confRaw === 'number' ? confRaw : parseFloat(String(confRaw)) / 100;
+    const confRaw = row[header.indexOf('confidence')];
+    // Xử lý tất cả định dạng: number 0.64, string "64%", string "64", string "0.64"
+    const confNum = (function() {
+      if (typeof confRaw === 'number') return confRaw; // Sheets đã parse sẵn
+      const s = String(confRaw).replace('%', '').trim();
+      const n = parseFloat(s);
+      if (isNaN(n)) return 0;
+      return n > 1 ? n / 100 : n; // "64" → 0.64 | "0.64" → 0.64
+    })();
     const alerts     = Number(row[header.indexOf('alerts')]      || 0);
     const crisis     = String(row[header.indexOf('crisis')]      || '').includes('CÓ');
     const note       = String(row[header.indexOf('ghi chú dpa')] || '');
@@ -513,14 +518,20 @@ function _markEmailSent(contractIds) {
 
 // Đọc interval hiện tại từ Railway, fallback PropertiesService
 function _getCurrentInterval() {
+  // PropertiesService là nguồn tin cậy chính — Railway app.state mất khi restart
+  const saved = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'off';
+
+  // Chỉ tin Railway nếu nó trả về giá trị có lịch thực (không phải 'off')
+  // Tránh trường hợp Railway restart → trả 'off' giả → Apps Script nghĩ chế độ tắt
   try {
     const r = UrlFetchApp.fetch(RAILWAY_URL + '/get-schedule', { muteHttpExceptions: true });
     if (r.getResponseCode() === 200) {
       const data = JSON.parse(r.getContentText());
-      if (data && data.interval) return data.interval;
+      if (data && data.interval && data.interval !== 'off') return data.interval;
     }
   } catch (e) { /* ignore */ }
-  return PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'off';
+
+  return saved;
 }
 
 function _deleteTriggersFor(fnName) {
@@ -577,6 +588,13 @@ function _getRecentlyAnalyzedIds(windowMs) {
  * URL dạng: https://script.google.com/macros/s/XXXX/exec?interval=every30min
  */
 function doGet(e) {
+  const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'set_schedule';
+
+  // Ghi DECISION_CARD khi founder click button email
+  if (action === 'write_decision') {
+    return _handleWriteDecision(e.parameter);
+  }
+
   const interval = (e && e.parameter && e.parameter.interval) ? e.parameter.interval : 'off';
   const valid    = ['off', 'every30min', 'every1h', 'every2h', 'every4h', 'daily8am'];
 
@@ -591,6 +609,39 @@ function doGet(e) {
   return ContentService.createTextOutput(
     JSON.stringify({ status: 'ok', interval: interval })
   ).setMimeType(ContentService.MimeType.JSON);
+}
+
+function _handleWriteDecision(params) {
+  try {
+    const contractId      = params.contract_id || '';
+    const decision        = params.decision || '';
+    const confidenceScore = params.confidence_score || '';
+    const timestamp       = params.timestamp || new Date().toISOString();
+
+    if (!contractId || !decision) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ status: 'error', message: 'Thiếu contract_id hoặc decision' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const ss = SpreadsheetApp.getActive();
+    let sheet = ss.getSheetByName('DECISION_CARD');
+    if (!sheet) {
+      sheet = ss.insertSheet('DECISION_CARD');
+      sheet.appendRow(['Thời gian', 'Hợp đồng', 'Quyết định', 'Confidence Score']);
+      sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
+    }
+
+    sheet.appendRow([timestamp, contractId, decision, confidenceScore]);
+
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'ok', contract_id: contractId, decision: decision })
+    ).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: err.toString() })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 // ── 11. Hàm tiện ích (chạy thủ công từ editor) ───────────────────────────────
@@ -624,6 +675,12 @@ function analyzeAll() {
   }
   if (results.length > 0) sendDigestEmail(results, 'analyzeAll');
   Logger.log('✅ Xong: ' + results.length + ' hợp đồng.');
+}
+
+/** Xóa toàn bộ flag analyzed để test lại từ đầu */
+function clearAnalyzedFlags() {
+  PropertiesService.getScriptProperties().deleteAllProperties();
+  Logger.log('✅ Đã xóa toàn bộ flag analyzed — có thể paste lại hợp đồng để test.');
 }
 
 /** Xem lịch triggers hiện tại */

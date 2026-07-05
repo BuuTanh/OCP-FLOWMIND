@@ -16,7 +16,7 @@ class BankOption(BaseModel):
 class DecisionCard(BaseModel):
     agent: str = "Decision & Partner Agent"
     contract_id: str
-    recommendation: Literal["KY", "KY_CO_DIEU_KIEN", "KHONG_KY", "CHUA_DU_DATA"]
+    recommendation: Literal["KY", "KY_CO_DIEU_KIEN", "KHONG_KY", "CHUA_DU_DU_LIEU"]
     confidence_score: float
     reasons: list[str]
     bank_options: list[BankOption]

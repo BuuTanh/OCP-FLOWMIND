@@ -327,10 +327,32 @@ def founder_decision(contract: str = "", action: str = "", token: str = ""):
     if not hasattr(app.state, "decisions"):
         app.state.decisions = {}
     from datetime import datetime
+    now_str = datetime.now().isoformat()
     app.state.decisions[contract] = {
         "action": action,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_str,
     }
+
+    # Persist DECISION_CARD to Google Sheets qua Apps Script Web App
+    try:
+        import requests as _req
+        web_analyzed = getattr(app.state, "web_analyzed", {})
+        confidence = web_analyzed.get(contract, {}).get("confidence", "")
+        apps_script_url = getattr(app.state, "apps_script_url", "")
+        if apps_script_url:
+            _req.get(
+                apps_script_url,
+                params={
+                    "action": "write_decision",
+                    "contract_id": contract,
+                    "decision": action,
+                    "confidence_score": confidence,
+                    "timestamp": now_str,
+                },
+                timeout=5,
+            )
+    except Exception:
+        pass  # Không block response nếu ghi sheet lỗi
 
     label_map = {"KY": "✅ Đã ký hợp đồng", "KHONG_KY": "❌ Từ chối ký", "YEU_CAU": "📋 Yêu cầu bổ sung thông tin"}
     color_map = {"KY": "#1e7e34", "KHONG_KY": "#c0392b", "YEU_CAU": "#e67e22"}
@@ -407,6 +429,8 @@ def set_schedule(body: dict):
         return {"status": "error", "message": f"interval không hợp lệ: {interval}"}
 
     app.state.schedule_interval = interval
+    if apps_script_url:
+        app.state.apps_script_url = apps_script_url
 
     # Gọi Apps Script Web App để tự động cài trigger
     apps_script_result = None

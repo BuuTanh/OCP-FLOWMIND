@@ -13,10 +13,45 @@ class DecisionPartnerAgent(BaseAgent):
     name = "Decision & Partner Agent"
     task_id = "TASK-003"
 
-    def _calc_confidence(self, credit_case: dict, doc_complete: bool) -> float:
+    def _count_missing_items(self, profiles: list[dict]) -> dict[str, int]:
+        """
+        Gọi OpenAI 1 lần để đếm số hạng mục còn thiếu trong precheck_note
+        của tất cả CR relevant. Trả về {credit_case_id: n_missing}.
+        Công thức báo cáo: confidence = eligibility_score × (1 - 0.15 × n_missing)
+        """
+        notes = {
+            cr["credit_case_id"]: cr.get("precheck_note", "").strip()
+            for cr in profiles
+            if cr.get("precheck_note", "").strip()
+        }
+        if not notes:
+            return {}
+
+        system = (
+            "Bạn là trợ lý phân tích hồ sơ tín dụng. "
+            "Nhiệm vụ: đếm số hạng mục/điều kiện còn thiếu hoặc chưa hoàn thành "
+            "trong precheck_note của mỗi hồ sơ. "
+            "Chỉ trả về JSON thuần, không giải thích."
+        )
+        user = (
+            f"Với mỗi hồ sơ dưới đây, đếm số hạng mục còn thiếu:\n"
+            f"{json.dumps(notes, ensure_ascii=False)}\n\n"
+            f"Trả về JSON dạng: {{\"CR-001\": 1, \"CR-002\": 2, ...}}"
+        )
+        try:
+            result_text, _ = self.safe_openai_call(system, user)
+            # Trích JSON từ response
+            match = re.search(r'\{[^{}]+\}', result_text, re.DOTALL)
+            if match:
+                return {k: int(v) for k, v in json.loads(match.group()).items()}
+        except Exception:
+            pass
+        return {}
+
+    def _calc_confidence(self, credit_case: dict, missing_map: dict[str, int]) -> float:
         base = float(credit_case.get("eligibility_score", 0))
-        completeness = 1.0 if doc_complete else 0.5
-        return round(base * completeness, 2)
+        n_missing = missing_map.get(credit_case.get("credit_case_id", ""), 0)
+        return round(base * (1 - 0.15 * n_missing), 2)
 
     def run(self, context: dict) -> dict:
         financial: FinancialProposal = context["financial_proposal"]
@@ -74,9 +109,12 @@ class DecisionPartnerAgent(BaseAgent):
                 "approval_status": "Review",
             }]
 
+        # Gọi OpenAI 1 lần để đếm missing items cho tất cả CR relevant
+        missing_map = self._count_missing_items(relevant_credit_profiles)
+
         for cr in relevant_credit_profiles:
-            doc_complete = "Missing" not in cr.get("precheck_note", "")
-            confidence = self._calc_confidence(cr, doc_complete)
+            doc_complete = missing_map.get(cr.get("credit_case_id", ""), 0) == 0
+            confidence = self._calc_confidence(cr, missing_map)
 
             if confidence < CONFIDENCE_THRESHOLD or not doc_complete:
                 blocked_cases.append(cr["credit_case_id"])
@@ -112,29 +150,12 @@ class DecisionPartnerAgent(BaseAgent):
                     requires_human_approval=True
                 ))
 
+        # Overall confidence = trung bình eligibility_score của các CR options (đã tính penalty missing)
         cr_base = (
             round(sum(o.eligibility_score for o in bank_options) / len(bank_options), 2)
-            if bank_options else 0.45
+            if bank_options else (self._calc_confidence(relevant_credit_profiles[0]) if relevant_credit_profiles else 0.45)
         )
-        # Blend credit score (60%) với customer payment_reliability (40%) → confidence per-contract
-        base_confidence = round(cr_base * 0.6 + payment_reliability * 0.4, 2)
-
-        # Điều chỉnh confidence dựa trên trạng thái xử lý rủi ro hiện tại
-        unresolved_critical = sum(
-            1 for a in risk.alerts
-            if a.severity == "Critical" and not any(
-                r in a.related_record or a.related_record in r
-                or r in a.alert_id or a.alert_id in r
-                for r in resolved_items
-            )
-        )
-        has_suspicious_txn = len(financial.suspicious_txn_ids) > 0
-        adjustment = (
-            - unresolved_critical * 0.04              # -4% mỗi Critical chưa xử lý
-            + min(len(resolved_items), 5) * 0.015     # +1.5% mỗi mục đã xử lý, tối đa 5
-            + (0.04 if crisis_resolved and has_suspicious_txn else 0)  # +4% chỉ khi có crisis thật và đã xử lý
-        )
-        overall_confidence = round(max(0.15, min(0.95, base_confidence + adjustment)), 2)
+        overall_confidence = round(max(0.15, min(0.95, cr_base)), 2)
 
         # Khi founder đã xác nhận xử lý crisis (TXN), các TXN alert không còn block recommendation
         # Chỉ non-TXN critical alerts (nếu có) mới giữ has_critical=True
@@ -153,17 +174,14 @@ class DecisionPartnerAgent(BaseAgent):
         # Gap/Value ratio: nếu cần vay > 30% giá trị hợp đồng thì rủi ro cao
         gap_ratio        = (funding_gap / contract_value) if contract_value > 0 else 0
 
-        if overall_confidence < CONFIDENCE_THRESHOLD and not bank_options:
-            # Không đủ phương án tài chính và không đủ tin cậy
-            recommendation = "CHUA_DU_DATA"
+        if overall_confidence < CONFIDENCE_THRESHOLD:
+            # Điểm tin cậy < 0.65 → chưa đủ dữ liệu để ra quyết định
+            recommendation = "CHUA_DU_DU_LIEU"
         elif gross_margin < 0.10:
             # Margin dưới 10%: ký lỗ — không có lý do kinh doanh để ký
             recommendation = "KHONG_KY"
-        elif has_critical and not crisis_resolved and overall_confidence < CONFIDENCE_THRESHOLD:
-            # Crisis chưa giải quyết + không đủ phương án tài chính → không ký
-            recommendation = "KHONG_KY"
         elif gap_ratio > 0.5 and not bank_options:
-            # Gap vốn > 50% giá trị hợp đồng mà không có phương án tài chính
+            # Gap vốn > 50% giá trị hợp đồng mà không xoay được vốn
             recommendation = "KHONG_KY"
         elif has_critical or not margin_ok or blocked_cases:
             # Có rủi ro cần giải quyết trước: crisis, margin thấp, hoặc hồ sơ chưa đủ
