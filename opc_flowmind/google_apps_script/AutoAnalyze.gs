@@ -149,21 +149,16 @@ function onSheetEdit(e) {
 // ── 4. Scheduled job — chạy định kỳ ─────────────────────────────────────────
 
 function runScheduled() {
+  // Kiểm tra chế độ hiện tại — nếu mặc định (off) thì không làm gì
+  const interval = _getCurrentInterval();
+  if (interval === 'off') {
+    Logger.log('⏭ runScheduled: đang ở chế độ mặc định, bỏ qua.');
+    return;
+  }
+
   const ss    = SpreadsheetApp.getActive();
   const sheet = ss.getSheetByName(CONTRACTS_SHEET);
   if (!sheet) return;
-
-  // Lấy interval từ Railway, fallback PropertiesService
-  let interval = 'every30min';
-  try {
-    const r = UrlFetchApp.fetch(RAILWAY_URL + '/get-schedule', { muteHttpExceptions: true });
-    if (r.getResponseCode() === 200) {
-      const data = JSON.parse(r.getContentText());
-      if (data && data.interval && data.interval !== 'off') interval = data.interval;
-    }
-  } catch (e) {
-    interval = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'every30min';
-  }
 
   // Gom các contract đã phân tích (có trong AI_RESULTS) nhưng chưa gửi email digest
   const pendingResults = _getPendingEmailResults();
@@ -518,20 +513,9 @@ function _markEmailSent(contractIds) {
 
 // Đọc interval hiện tại từ Railway, fallback PropertiesService
 function _getCurrentInterval() {
-  // PropertiesService là nguồn tin cậy chính — Railway app.state mất khi restart
-  const saved = PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'off';
-
-  // Chỉ tin Railway nếu nó trả về giá trị có lịch thực (không phải 'off')
-  // Tránh trường hợp Railway restart → trả 'off' giả → Apps Script nghĩ chế độ tắt
-  try {
-    const r = UrlFetchApp.fetch(RAILWAY_URL + '/get-schedule', { muteHttpExceptions: true });
-    if (r.getResponseCode() === 200) {
-      const data = JSON.parse(r.getContentText());
-      if (data && data.interval && data.interval !== 'off') return data.interval;
-    }
-  } catch (e) { /* ignore */ }
-
-  return saved;
+  // PropertiesService là nguồn duy nhất — được cập nhật mỗi khi user lưu lịch trên web
+  // Không gọi Railway vì app.state mất khi Railway restart → không đáng tin
+  return PropertiesService.getScriptProperties().getProperty('SCHEDULE_INTERVAL') || 'off';
 }
 
 function _deleteTriggersFor(fnName) {
