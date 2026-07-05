@@ -93,35 +93,32 @@ class DecisionPartnerAgent(BaseAgent):
         customer_type = target_customer.get("customer_type", "")
         payment_reliability = float(str(target_customer.get("payment_reliability", 0.65)).replace(",", "."))
 
+        bank_options: list[BankOption] = []
+        blocked_cases: list[str] = []
+
+        payment_terms_lower = target_contract.get("payment_terms", "").lower()
+        contract_value_f = float(target_contract.get("contract_value", 0))
+
         # Lọc credit profiles phù hợp với hợp đồng đang phân tích:
         # - CR có đề cập contract_id cụ thể → chỉ dùng khi đúng contract
         # - CR không gắn contract cụ thể → chỉ include khi request_type phù hợp nhu cầu contract
-        contract_value_f = float(target_contract.get("contract_value", 0))
-
         def _cr_relevant(cr: dict) -> bool:
             basis = cr.get("collateral_or_basis", "")
             linked = re.findall(r'CON-\d+', basis)
             if linked:
                 return contract_id in linked
-            # CR toàn cục: kiểm tra request_type có phù hợp với payment_terms/contract không
             req = cr.get("request_type", "").lower()
-            pt  = payment_terms_lower
             if "performance bond" in req:
-                return "performance bond" in pt
+                return "performance bond" in payment_terms_lower
             if "trade finance" in req or "lc support" in req:
-                return "lc" in pt or "trade finance" in pt
+                return "lc" in payment_terms_lower or "trade finance" in payment_terms_lower
             if "micro" in req:
                 return contract_value_f < 1_000_000_000
             if "working capital" in req:
-                return True  # working capital chung → luôn liên quan
-            return False  # loại không xác định → bỏ qua
+                return True
+            return False
 
         relevant_credit_profiles = [cr for cr in credit_profiles if _cr_relevant(cr)]
-
-        bank_options: list[BankOption] = []
-        blocked_cases: list[str] = []
-
-        payment_terms_lower = target_contract.get("payment_terms", "").lower()
 
         # Nếu không có CR nào match payment_terms, tạo synthetic CR từ contract data
         cr_types_available = [cr.get("request_type", "").lower() for cr in relevant_credit_profiles]
