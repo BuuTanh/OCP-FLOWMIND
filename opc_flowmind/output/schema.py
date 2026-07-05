@@ -107,7 +107,8 @@ def build_final_output(crisis_result, financial_proposal, risk_assessment,
                 else None
             ),
             "no_recommendation_reason": decision_card.no_recommendation_reason,
-            "narrative": decision_card.narrative
+            "narrative": decision_card.narrative,
+            "missing_items": decision_card.missing_items or {}
         },
         "agent_logs": agent_logs
     }

@@ -1206,51 +1206,70 @@ export function Pipeline() {
                 }
               }
             }
-            if (missingFlat.length === 0) return null;
-            const resolvedCount = missingFlat.filter(m => resolvedCreditItems.has(m.key)).length;
-            return (
-              <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <FileCheck size={15} className="text-gray-500" />
-                  <h3 className="text-sm font-semibold text-slate-800">Hạng mục còn thiếu</h3>
-                  <span className="ml-auto text-xs text-slate-400">
-                    {resolvedCount}/{missingFlat.length} đã bổ sung
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mb-3">
-                  Tick vào các hạng mục đã bổ sung xong → chạy lại phân tích để tính lại confidence và cập nhật đề xuất
-                </p>
-                <ul className="space-y-2">
-                  {missingFlat.map(({ key, label }) => {
-                    const done = resolvedCreditItems.has(key);
-                    return (
-                      <li key={key} className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border transition-colors ${done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
-                        <input
-                          type="checkbox"
-                          checked={done}
-                          onChange={() => toggleCreditItem(key)}
-                          className="mt-0.5 accent-brand-700 shrink-0 w-4 h-4 cursor-pointer"
-                        />
-                        <span className={`text-xs flex-1 leading-relaxed ${done ? 'text-green-700 line-through' : 'text-slate-700'}`}>
-                          {label}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {resolvedCount > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <p className="text-xs text-green-700 font-medium">
-                      ✓ {resolvedCount} hạng mục đã bổ sung — chạy lại để cập nhật confidence
-                    </p>
-                    <button
-                      onClick={() => { setResolvedCreditItems(new Set()); localStorage.removeItem(`credit_resolved_${selectedContract}`); }}
-                      className="text-xs text-slate-400 hover:text-slate-600"
-                    >
-                      Reset
-                    </button>
+
+            // Khi có danh sách missing items cụ thể từ AI
+            if (missingFlat.length > 0) {
+              const resolvedCount = missingFlat.filter(m => resolvedCreditItems.has(m.key)).length;
+              return (
+                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FileCheck size={15} className="text-gray-500" />
+                    <h3 className="text-sm font-semibold text-slate-800">Hạng mục còn thiếu — cần bổ sung để tính lại</h3>
+                    <span className="ml-auto text-xs text-slate-400">
+                      {resolvedCount}/{missingFlat.length} đã bổ sung
+                    </span>
                   </div>
-                )}
+                  <p className="text-xs text-slate-400 mb-3">
+                    AI phát hiện các hạng mục chưa hoàn thành trong hồ sơ tín dụng. Tick vào mục đã xử lý xong → chạy lại để tính lại confidence score.
+                  </p>
+                  <ul className="space-y-2">
+                    {missingFlat.map(({ key, label }) => {
+                      const done = resolvedCreditItems.has(key);
+                      return (
+                        <li key={key} className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border transition-colors ${done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
+                          <input
+                            type="checkbox"
+                            checked={done}
+                            onChange={() => toggleCreditItem(key)}
+                            className="mt-0.5 accent-brand-700 shrink-0 w-4 h-4 cursor-pointer"
+                          />
+                          <span className={`text-xs flex-1 leading-relaxed ${done ? 'text-green-700 line-through' : 'text-slate-700'}`}>
+                            {label}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {resolvedCount > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <p className="text-xs text-green-700 font-medium">
+                        ✓ {resolvedCount} hạng mục đã bổ sung — confidence sẽ được tính lại khi chạy lại
+                      </p>
+                      <button
+                        onClick={() => { setResolvedCreditItems(new Set()); localStorage.removeItem(`credit_resolved_${selectedContract}`); }}
+                        className="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Khi không có missing items cụ thể — confidence thấp do điểm tín dụng cơ bản
+            return (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle size={15} className="text-gray-500 shrink-0" />
+                  <h3 className="text-sm font-semibold text-slate-700">Tại sao chưa đủ dữ liệu?</h3>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                  Confidence score ({(decision.confidence_score * 100).toFixed(0)}%) thấp hơn ngưỡng 65% do điểm tín dụng cơ bản (eligibility score) của các hồ sơ chưa đạt. Không phát hiện hạng mục thiếu cụ thể trong precheck — hệ thống cần thêm dữ liệu để ra quyết định chính xác.
+                </p>
+                <p className="text-xs text-slate-500">
+                  → Kiểm tra lại hồ sơ tín dụng trong Google Sheets (tab 10_CREDIT_PROFILE), bổ sung precheck_note hoặc nâng eligibility_score, sau đó nhấn <strong>Reload cache</strong> trong Cài đặt và chạy lại phân tích.
+                </p>
               </div>
             );
           })()}
