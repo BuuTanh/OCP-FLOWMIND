@@ -224,9 +224,14 @@ class DecisionPartnerAgent(BaseAgent):
         # Gap/Value ratio: nếu cần vay > 30% giá trị hợp đồng thì rủi ro cao
         gap_ratio        = (funding_gap / contract_value) if contract_value > 0 else 0
 
-        if overall_confidence < CONFIDENCE_THRESHOLD:
-            # Điểm tin cậy < 0.65 → chưa đủ dữ liệu để ra quyết định
+        has_actual_missing = any(len(v) > 0 for v in missing_detail.values())
+
+        if overall_confidence < CONFIDENCE_THRESHOLD and has_actual_missing:
+            # Confidence thấp DO thiếu tài liệu thực sự → yêu cầu bổ sung
             recommendation = "CHUA_DU_DU_LIEU"
+        elif overall_confidence < CONFIDENCE_THRESHOLD and not has_actual_missing:
+            # Confidence thấp do rủi ro cao (Critical risk, low margin) — data đã đủ
+            recommendation = "KY_CO_DIEU_KIEN"
         elif gross_margin < 0.10:
             # Margin dưới 10%: ký lỗ — không có lý do kinh doanh để ký
             recommendation = "KHONG_KY"
