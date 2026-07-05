@@ -15,6 +15,25 @@ import json
 import hashlib
 from datetime import datetime
 
+# ── Persist config qua Railway restart ───────────────────────────────────────
+_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime_config.json")
+
+def _load_config() -> dict:
+    try:
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_config(data: dict):
+    try:
+        cfg = _load_config()
+        cfg.update(data)
+        with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 from agents.crisis_layer import run_crisis_scan
 from agents.dfa import DataFinanceAgent
 from agents.rca import RiskComplianceAgent
@@ -27,6 +46,12 @@ from data import gsheet_loader
 from rag import memory as rag_memory
 
 app = FastAPI(title="OPC FlowMind API", version="1.0.0")
+
+# Load config đã lưu trước đó (survive Railway restart)
+_cfg = _load_config()
+app.state.apps_script_url  = _cfg.get("apps_script_url", "")
+app.state.schedule_interval = _cfg.get("schedule_interval", "off")
+app.state.notify_emails     = _cfg.get("notify_emails", [])
 
 app.add_middleware(
     CORSMiddleware,
@@ -456,6 +481,13 @@ def set_schedule(body: dict):
         app.state.apps_script_url = apps_script_url
     if emails:
         app.state.notify_emails = emails
+
+    # Persist để survive Railway restart
+    _save_config({
+        "schedule_interval": interval,
+        **({"apps_script_url": apps_script_url} if apps_script_url else {}),
+        **({"notify_emails": emails} if emails else {}),
+    })
 
     # Gọi Apps Script Web App để tự động cài trigger + lưu emails
     apps_script_result = None

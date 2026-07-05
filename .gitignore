@@ -1,3 +1,6 @@
+# Runtime config (Railway persist — không commit)
+opc_flowmind/runtime_config.json
+
 # Python
 __pycache__/
 *.pyc

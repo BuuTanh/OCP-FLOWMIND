@@ -674,10 +674,15 @@ function analyzeAll() {
   Logger.log('✅ Xong: ' + results.length + ' hợp đồng.');
 }
 
-/** Xóa toàn bộ flag analyzed để test lại từ đầu */
+/** Xóa flag analyzed_* để test lại từ đầu — giữ nguyên SCHEDULE_INTERVAL và NOTIFY_EMAILS */
 function clearAnalyzedFlags() {
-  PropertiesService.getScriptProperties().deleteAllProperties();
-  Logger.log('✅ Đã xóa toàn bộ flag analyzed — có thể paste lại hợp đồng để test.');
+  const props = PropertiesService.getScriptProperties();
+  const all   = props.getProperties();
+  const keep  = ['SCHEDULE_INTERVAL', 'NOTIFY_EMAILS'];
+  Object.keys(all).forEach(k => {
+    if (!keep.includes(k)) props.deleteProperty(k);
+  });
+  Logger.log('✅ Đã xóa flag analyzed — SCHEDULE_INTERVAL giữ nguyên: ' + (props.getProperty('SCHEDULE_INTERVAL') || 'off'));
 }
 
 /** Xem lịch triggers hiện tại */
