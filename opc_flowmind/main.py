@@ -8,7 +8,8 @@ from config import TARGET_CONTRACT_ID
 
 def run_pipeline(contract_id: str = TARGET_CONTRACT_ID,
                  founder_crisis_resolved: bool = False,
-                 resolved_items: list = None) -> dict:
+                 resolved_items: list = None,
+                 resolved_credit_items: list = None) -> dict:
     logs = []
     print(f"\n{'='*60}")
     print(f"OPC FlowMind — Phân tích {contract_id}")
@@ -49,7 +50,8 @@ def run_pipeline(contract_id: str = TARGET_CONTRACT_ID,
         "financial_proposal": financial_proposal,
         "risk_assessment": risk_assessment,
         "crisis_resolved": founder_crisis_resolved,
-        "resolved_items": resolved_items or []
+        "resolved_items": resolved_items or [],
+        "resolved_credit_items": resolved_credit_items or [],
     })
     decision_card = dpa_result["output"]
     logs.append(dpa_result["log"].model_dump())

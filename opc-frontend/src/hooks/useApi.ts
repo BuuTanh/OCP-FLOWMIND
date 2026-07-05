@@ -7,11 +7,12 @@ const API_BASE: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const client = axios.create({ baseURL: API_BASE, timeout: 120000 });
 
 export function useApi() {
-  async function runAnalysis(contractId: string, crisisResolved: boolean, resolvedItems: string[] = []): Promise<AnalysisResult> {
+  async function runAnalysis(contractId: string, crisisResolved: boolean, resolvedItems: string[] = [], resolvedCreditItems: string[] = []): Promise<AnalysisResult> {
     const { data } = await client.post('/analyze', {
       contract_id: contractId,
       crisis_resolved: crisisResolved,
       resolved_items: resolvedItems,
+      resolved_credit_items: resolvedCreditItems,
     });
     return data;
   }

@@ -25,6 +25,7 @@ class DecisionCard(BaseModel):
     approval_checklist: list[str]
     narrative: str
     no_recommendation_reason: Optional[str] = None
+    missing_items: Optional[dict] = None  # {cr_id: [list of missing item strings]}
 
 class CrisisAlert(BaseModel):
     txn_ids: list[str]

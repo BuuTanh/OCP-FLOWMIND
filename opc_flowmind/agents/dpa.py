@@ -13,10 +13,11 @@ class DecisionPartnerAgent(BaseAgent):
     name = "Decision & Partner Agent"
     task_id = "TASK-003"
 
-    def _count_missing_items(self, profiles: list[dict]) -> dict[str, int]:
+    def _get_missing_detail(self, profiles: list[dict], resolved_credit_items: list[str] = []) -> dict[str, list[str]]:
         """
-        Gọi OpenAI 1 lần để đếm số hạng mục còn thiếu trong precheck_note
-        của tất cả CR relevant. Trả về {credit_case_id: n_missing}.
+        Gọi OpenAI 1 lần để lấy danh sách hạng mục còn thiếu trong precheck_note.
+        Trả về {credit_case_id: [item1, item2, ...]}.
+        Nếu resolved_credit_items được truyền vào, loại bỏ các item đã giải quyết.
         Công thức báo cáo: confidence = eligibility_score × (1 - 0.15 × n_missing)
         """
         notes = {
@@ -29,36 +30,45 @@ class DecisionPartnerAgent(BaseAgent):
 
         system = (
             "Bạn là trợ lý phân tích hồ sơ tín dụng. "
-            "Nhiệm vụ: đếm số hạng mục/điều kiện còn thiếu hoặc chưa hoàn thành "
-            "trong precheck_note của mỗi hồ sơ. "
+            "Nhiệm vụ: liệt kê các hạng mục/điều kiện còn thiếu hoặc chưa hoàn thành "
+            "trong precheck_note của mỗi hồ sơ. Mỗi hạng mục là 1 chuỗi ngắn gọn. "
             "Chỉ trả về JSON thuần, không giải thích."
         )
         user = (
-            f"Với mỗi hồ sơ dưới đây, đếm số hạng mục còn thiếu:\n"
+            f"Với mỗi hồ sơ dưới đây, liệt kê từng hạng mục còn thiếu:\n"
             f"{json.dumps(notes, ensure_ascii=False)}\n\n"
-            f"Trả về JSON dạng: {{\"CR-001\": 1, \"CR-002\": 2, ...}}"
+            f"Trả về JSON dạng: {{\"CR-001\": [\"item A\", \"item B\"], \"CR-002\": [\"item C\"]}}"
         )
         try:
             result_text, _ = self.safe_openai_call(system, user)
-            # Trích JSON từ response
-            match = re.search(r'\{[^{}]+\}', result_text, re.DOTALL)
+            match = re.search(r'\{[\s\S]+\}', result_text)
             if match:
-                return {k: int(v) for k, v in json.loads(match.group()).items()}
+                raw: dict = json.loads(match.group())
+                # Loại bỏ các item đã được Founder giải quyết
+                result = {}
+                for cr_id, items in raw.items():
+                    remaining = [
+                        item for item in (items if isinstance(items, list) else [])
+                        if not any(r.lower() in item.lower() for r in resolved_credit_items)
+                    ]
+                    result[cr_id] = remaining
+                return result
         except Exception:
             pass
         return {}
 
-    def _calc_confidence(self, credit_case: dict, missing_map: dict[str, int]) -> float:
+    def _calc_confidence(self, credit_case: dict, missing_detail: dict[str, list]) -> float:
         base = float(credit_case.get("eligibility_score", 0))
-        n_missing = missing_map.get(credit_case.get("credit_case_id", ""), 0)
+        n_missing = len(missing_detail.get(credit_case.get("credit_case_id", ""), []))
         return round(base * (1 - 0.15 * n_missing), 2)
 
     def run(self, context: dict) -> dict:
         financial: FinancialProposal = context["financial_proposal"]
         risk: RiskAssessment         = context["risk_assessment"]
         contract_id = financial.target_contract_id
-        crisis_resolved: bool        = context.get("crisis_resolved", False)
-        resolved_items: list[str]    = context.get("resolved_items", [])
+        crisis_resolved: bool          = context.get("crisis_resolved", False)
+        resolved_items: list[str]      = context.get("resolved_items", [])
+        resolved_credit_items: list[str] = context.get("resolved_credit_items", [])
 
         credit_profiles = loader.get_credit_profile()
         bank_products   = loader.get_bank_products()
@@ -109,12 +119,12 @@ class DecisionPartnerAgent(BaseAgent):
                 "approval_status": "Review",
             }]
 
-        # Gọi OpenAI 1 lần để đếm missing items cho tất cả CR relevant
-        missing_map = self._count_missing_items(relevant_credit_profiles)
+        # Gọi OpenAI 1 lần để lấy danh sách missing items (trừ các item đã resolved)
+        missing_detail = self._get_missing_detail(relevant_credit_profiles, resolved_credit_items)
 
         for cr in relevant_credit_profiles:
-            doc_complete = missing_map.get(cr.get("credit_case_id", ""), 0) == 0
-            confidence = self._calc_confidence(cr, missing_map)
+            doc_complete = len(missing_detail.get(cr.get("credit_case_id", ""), [])) == 0
+            confidence = self._calc_confidence(cr, missing_detail)
 
             if confidence < CONFIDENCE_THRESHOLD or not doc_complete:
                 blocked_cases.append(cr["credit_case_id"])
@@ -153,7 +163,7 @@ class DecisionPartnerAgent(BaseAgent):
         # Overall confidence = trung bình eligibility_score của các CR options (đã tính penalty missing)
         cr_base = (
             round(sum(o.eligibility_score for o in bank_options) / len(bank_options), 2)
-            if bank_options else (self._calc_confidence(relevant_credit_profiles[0], missing_map) if relevant_credit_profiles else 0.45)
+            if bank_options else (self._calc_confidence(relevant_credit_profiles[0], missing_detail) if relevant_credit_profiles else 0.45)
         )
         overall_confidence = round(max(0.15, min(0.95, cr_base)), 2)
 
@@ -303,6 +313,9 @@ class DecisionPartnerAgent(BaseAgent):
             fallback = [l.strip() for l in lines if l.strip() and not skip_patterns.search(l)]
             reasons = fallback[:4] if fallback else ["[Xem narrative đầy đủ]"]
 
+        # Khi CHUA_DU_DU_LIEU, truyền missing_items để frontend hiển thị checklist bổ sung
+        missing_items_for_card = missing_detail if recommendation == "CHUA_DU_DU_LIEU" else None
+
         result = DecisionCard(
             contract_id=contract_id,
             recommendation=recommendation,
@@ -313,7 +326,8 @@ class DecisionPartnerAgent(BaseAgent):
             human_approval_required=True,
             approval_checklist=approval_checklist,
             narrative=narrative_text,
-            no_recommendation_reason=f"Blocked cases: {blocked_cases}" if blocked_cases and not bank_options else None
+            no_recommendation_reason=f"Blocked cases: {blocked_cases}" if blocked_cases and not bank_options else None,
+            missing_items=missing_items_for_card,
         )
 
         check = validate_recommendation(result.model_dump())

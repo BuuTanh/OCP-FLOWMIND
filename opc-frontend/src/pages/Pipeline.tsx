@@ -642,12 +642,24 @@ export function Pipeline() {
     } catch { return new Set(); }
   });
 
+  // Credit missing items resolved state — for CHUA_DU_DU_LIEU contracts
+  const [resolvedCreditItems, setResolvedCreditItems] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(`credit_resolved_${selectedContract}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
   // Reload from localStorage when contract changes
   useEffect(() => {
     try {
       const saved = localStorage.getItem(`checklist_resolved_${selectedContract}`);
       setResolvedIds(saved ? new Set(JSON.parse(saved)) : new Set());
     } catch { setResolvedIds(new Set()); }
+    try {
+      const saved = localStorage.getItem(`credit_resolved_${selectedContract}`);
+      setResolvedCreditItems(saved ? new Set(JSON.parse(saved)) : new Set());
+    } catch { setResolvedCreditItems(new Set()); }
   }, [selectedContract]);
 
   function toggleResolved(recordId: string) {
@@ -656,6 +668,16 @@ export function Pipeline() {
       if (next.has(recordId)) next.delete(recordId);
       else next.add(recordId);
       localStorage.setItem(`checklist_resolved_${selectedContract}`, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  function toggleCreditItem(key: string) {
+    setResolvedCreditItems(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      localStorage.setItem(`credit_resolved_${selectedContract}`, JSON.stringify([...next]));
       return next;
     });
   }
@@ -705,7 +727,7 @@ export function Pipeline() {
       await stepDelay(600);
       setRunningStep(3);
 
-      const data = await runAnalysis(selectedContract, crisisResolved, [...resolvedIds]);
+      const data = await runAnalysis(selectedContract, crisisResolved, [...resolvedIds], [...resolvedCreditItems]);
       setLastResult(data);
       setAnalysisHistory(h => ({ ...h, [selectedContract]: data }));
       setSelectedRunId(null); // reset to show latest
@@ -836,7 +858,7 @@ export function Pipeline() {
           </select>
         </div>
 
-        {result?.zone_workflow.crisis_layer.active && (
+        {result?.zone_workflow.crisis_layer.active && rec !== 'CHUA_DU_DU_LIEU' && rec !== 'KHONG_KY' && (
           <div className="flex items-center gap-2 pb-1">
             <label className="text-xs font-semibold text-slate-600">Crisis resolved</label>
             <button
@@ -1113,8 +1135,8 @@ export function Pipeline() {
             </div>
           )}
 
-          {/* Approval checklist — interactive */}
-          {checklistParsed.length > 0 && (
+          {/* Approval checklist — interactive (KY_CO_DIEU_KIEN only, or read-only for KY) */}
+          {checklistParsed.length > 0 && rec !== 'KHONG_KY' && rec !== 'CHUA_DU_DU_LIEU' && (
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <FileCheck size={15} className="text-brand-600" />
@@ -1122,35 +1144,45 @@ export function Pipeline() {
                 <span className="ml-auto text-xs text-slate-400">
                   {resolvedIds.size}/{checklistParsed.length} đã xử lý
                 </span>
+                {rec === 'KY' && (
+                  <span className="text-xs text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full font-medium ml-1">
+                    ✅ Đã đủ điều kiện
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mb-3">
-                Tick vào mục đã xử lý xong → chạy lại phân tích để cập nhật kết quả
+                {rec === 'KY'
+                  ? 'Các mục điều kiện đã hoàn thành — hệ thống đủ tự tin để đề xuất ký hợp đồng.'
+                  : 'Tick vào mục đã xử lý xong → chạy lại phân tích để cập nhật kết quả'}
               </p>
               <ul className="space-y-2">
                 {checklistParsed.map(({ text, recordId, detail }) => {
-                  const done = resolvedIds.has(recordId);
+                  const done = rec === 'KY' ? true : resolvedIds.has(recordId);
                   return (
                     <li key={recordId} className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border transition-colors ${done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
                       <input
                         type="checkbox"
                         checked={done}
-                        onChange={() => toggleResolved(recordId)}
-                        className="mt-0.5 accent-brand-700 shrink-0 w-4 h-4 cursor-pointer"
+                        disabled={rec === 'KY'}
+                        onChange={() => rec !== 'KY' && toggleResolved(recordId)}
+                        className="mt-0.5 accent-brand-700 shrink-0 w-4 h-4 cursor-pointer disabled:cursor-default"
                       />
                       <span className={`text-xs flex-1 leading-relaxed ${done ? 'text-green-700 line-through' : 'text-slate-700'}`}>
                         {text}
                       </span>
-                      <button
-                        onClick={() => setActiveModal(detail)}
-                        className="shrink-0 text-xs text-brand-600 hover:text-brand-800 font-medium border border-brand-200 rounded-md px-2 py-1 hover:bg-brand-50 transition-colors whitespace-nowrap"
-                      >
-                        Xem hướng dẫn →
-                      </button>
+                      {rec !== 'KY' && (
+                        <button
+                          onClick={() => setActiveModal(detail)}
+                          className="shrink-0 text-xs text-brand-600 hover:text-brand-800 font-medium border border-brand-200 rounded-md px-2 py-1 hover:bg-brand-50 transition-colors whitespace-nowrap"
+                        >
+                          Xem hướng dẫn →
+                        </button>
+                      )}
                     </li>
                   );
                 })}
               </ul>
-              {resolvedIds.size > 0 && (
+              {rec !== 'KY' && resolvedIds.size > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <p className="text-xs text-green-700 font-medium">
                     ✓ {resolvedIds.size} mục đã xử lý sẽ được bỏ qua trong lần phân tích tiếp theo
@@ -1165,6 +1197,65 @@ export function Pipeline() {
               )}
             </div>
           )}
+
+          {/* Missing items checklist — only for CHUA_DU_DU_LIEU */}
+          {rec === 'CHUA_DU_DU_LIEU' && (() => {
+            const missingFlat: { key: string; label: string }[] = [];
+            if (decision.missing_items) {
+              for (const [crId, items] of Object.entries(decision.missing_items)) {
+                for (const item of items) {
+                  missingFlat.push({ key: `${crId}::${item}`, label: `[${crId}] ${item}` });
+                }
+              }
+            }
+            if (missingFlat.length === 0) return null;
+            const resolvedCount = missingFlat.filter(m => resolvedCreditItems.has(m.key)).length;
+            return (
+              <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileCheck size={15} className="text-gray-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Hạng mục còn thiếu</h3>
+                  <span className="ml-auto text-xs text-slate-400">
+                    {resolvedCount}/{missingFlat.length} đã bổ sung
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mb-3">
+                  Tick vào các hạng mục đã bổ sung xong → chạy lại phân tích để tính lại confidence và cập nhật đề xuất
+                </p>
+                <ul className="space-y-2">
+                  {missingFlat.map(({ key, label }) => {
+                    const done = resolvedCreditItems.has(key);
+                    return (
+                      <li key={key} className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border transition-colors ${done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-slate-200'}`}>
+                        <input
+                          type="checkbox"
+                          checked={done}
+                          onChange={() => toggleCreditItem(key)}
+                          className="mt-0.5 accent-brand-700 shrink-0 w-4 h-4 cursor-pointer"
+                        />
+                        <span className={`text-xs flex-1 leading-relaxed ${done ? 'text-green-700 line-through' : 'text-slate-700'}`}>
+                          {label}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {resolvedCount > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <p className="text-xs text-green-700 font-medium">
+                      ✓ {resolvedCount} hạng mục đã bổ sung — chạy lại để cập nhật confidence
+                    </p>
+                    <button
+                      onClick={() => { setResolvedCreditItems(new Set()); localStorage.removeItem(`credit_resolved_${selectedContract}`); }}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Decision status banner — shows saved decision for this contract */}
           {activeDecision && (!viewingHistorical || activeDecision.runId === selectedRunId) && (
@@ -1216,29 +1307,51 @@ export function Pipeline() {
             </div>
           )}
 
-          {/* Action buttons */}
-          <div className="flex gap-3">
-            <button
-              disabled={!decision.confirm_button_enabled}
-              onClick={() => setShowConfirmModal(true)}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
-              title={decision.confirm_button_disabled_reason || ''}
-            >
-              <PenLine size={15} /> Xác nhận ký hợp đồng
-            </button>
-            <button
-              onClick={() => setShowRejectModal(true)}
-              className="px-5 bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl transition-colors text-sm border border-red-200 flex items-center gap-2"
-            >
-              <ThumbsDown size={15} /> Từ chối
-            </button>
-            <button
-              onClick={() => setShowRequestModal(true)}
-              className="px-5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold py-3 rounded-xl transition-colors text-sm border border-slate-200 flex items-center gap-2"
-            >
-              <ClipboardList size={15} /> Yêu cầu bổ sung
-            </button>
-          </div>
+          {/* Action buttons — conditional per recommendation */}
+          {rec === 'KHONG_KY' ? (
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRejectModal(true)}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+              >
+                <ThumbsDown size={15} /> Xác nhận từ chối
+              </button>
+            </div>
+          ) : rec === 'CHUA_DU_DU_LIEU' ? (
+            <div className="flex gap-3">
+              <button
+                onClick={handleRun}
+                disabled={isRunning}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+              >
+                {isRunning ? <Loader size={15} className="animate-spin" /> : <RotateCcw size={15} />}
+                Chạy lại sau khi bổ sung dữ liệu
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button
+                disabled={!decision.confirm_button_enabled}
+                onClick={() => setShowConfirmModal(true)}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+                title={decision.confirm_button_disabled_reason || ''}
+              >
+                <PenLine size={15} /> Xác nhận ký hợp đồng
+              </button>
+              <button
+                onClick={() => setShowRejectModal(true)}
+                className="px-5 bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl transition-colors text-sm border border-red-200 flex items-center gap-2"
+              >
+                <ThumbsDown size={15} /> Từ chối
+              </button>
+              <button
+                onClick={() => setShowRequestModal(true)}
+                className="px-5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold py-3 rounded-xl transition-colors text-sm border border-slate-200 flex items-center gap-2"
+              >
+                <ClipboardList size={15} /> Yêu cầu bổ sung
+              </button>
+            </div>
+          )}
         </div>
       )}
 

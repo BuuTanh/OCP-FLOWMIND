@@ -190,7 +190,8 @@ def api_run_pipeline(req: PipelineRequest):
 class AnalyzeRequest(BaseModel):
     contract_id: str = "CON-001"
     crisis_resolved: bool = False
-    resolved_items: list[str] = []   # IDs đã được founder xác nhận xử lý
+    resolved_items: list[str] = []           # alert/record IDs đã tick xử lý
+    resolved_credit_items: list[str] = []    # missing items credit profile đã giải quyết
 
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest):
@@ -205,7 +206,8 @@ def analyze(req: AnalyzeRequest):
     result = run_pipeline(
         contract_id=req.contract_id,
         founder_crisis_resolved=req.crisis_resolved,
-        resolved_items=req.resolved_items
+        resolved_items=req.resolved_items,
+        resolved_credit_items=req.resolved_credit_items,
     )
 
     # Agentic Memory: lưu vào RAG trong background — không block HTTP response

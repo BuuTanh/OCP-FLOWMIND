@@ -35,7 +35,7 @@ export interface BankOption {
   fit_reason: string;
 }
 
-export type Recommendation = 'KY' | 'KY_CO_DIEU_KIEN' | 'KHONG_KY' | 'CHUA_DU_DATA';
+export type Recommendation = 'KY' | 'KY_CO_DIEU_KIEN' | 'KHONG_KY' | 'CHUA_DU_DATA' | 'CHUA_DU_DU_LIEU';
 
 export interface DecisionCard {
   contract_id: string;
@@ -49,6 +49,7 @@ export interface DecisionCard {
   confirm_button_enabled: boolean;
   confirm_button_disabled_reason: string | null;
   narrative: string;
+  missing_items?: Record<string, string[]>;
 }
 
 export interface PipelineStep {
