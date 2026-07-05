@@ -847,7 +847,7 @@ export function Pipeline() {
 
       {/* Controls */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-wrap items-end gap-4 shadow-sm">
-        <div className="flex-1 min-w-[160px]">
+        <div className="min-w-[160px] max-w-[260px] flex-shrink-0">
           <label className="block text-xs font-semibold text-slate-600 mb-1.5">Hợp đồng</label>
           <select
             value={selectedContract}
