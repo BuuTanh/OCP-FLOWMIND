@@ -4,6 +4,7 @@ export interface Contract {
   description: string;
   contract_value: number;
   gross_margin: number;
+  concentration_pct: number;
   status: string;
   start_date: string;
   end_date: string;
@@ -26,6 +27,12 @@ export interface RiskAlert {
   related_record: string;
 }
 
+export interface Reason {
+  text: string;
+  source_sheet: string;
+  source_cell: string;
+}
+
 export interface BankOption {
   bank: string;
   product_name: string;
@@ -41,11 +48,12 @@ export interface DecisionCard {
   contract_id: string;
   recommendation: Recommendation;
   confidence_score: number;
-  three_reasons: string[];
+  three_reasons: Reason[];
   bank_options: BankOption[];
   risk_alerts: RiskAlert[];
   approval_checklist: string[];
   preconditions: string[];
+  guard_condition: string;
   confirm_button_enabled: boolean;
   confirm_button_disabled_reason: string | null;
   narrative: string;

@@ -3,7 +3,7 @@ FastAPI server — n8n gọi vào đây qua HTTP Request nodes.
 Chạy: uvicorn api:app --reload --port 8000
 """
 
-import sys, os
+import sys, os, uuid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, HTTPException
@@ -64,21 +64,25 @@ app.add_middleware(
 
 class ContractRequest(BaseModel):
     contract_id: str = TARGET_CONTRACT_ID
+    trace_id: Optional[str] = None   # n8n truyền xuyên suốt các step để cùng 1 mã truy vết
 
 class RCARequest(BaseModel):
     contract_id: str = TARGET_CONTRACT_ID
     financial_proposal: dict   # serialized FinancialProposal
+    trace_id: Optional[str] = None
 
 class DPARequest(BaseModel):
     financial_proposal: dict
     risk_assessment: dict
     crisis_resolved: bool = False
+    trace_id: Optional[str] = None
 
 class BuildOutputRequest(BaseModel):
     crisis_result: dict
     financial_proposal: dict
     risk_assessment: dict
     decision_card: dict
+    trace_id: Optional[str] = None
 
 class PipelineRequest(BaseModel):
     contract_id: str = TARGET_CONTRACT_ID
@@ -97,7 +101,9 @@ def api_crisis_scan(req: ContractRequest):
     n8n Step 1 — Crisis Layer
     Phát hiện TXN risk >= 85, trả về crisis status.
     """
-    result = run_crisis_scan()
+    trace_id = req.trace_id or str(uuid.uuid4())
+    result = run_crisis_scan(trace_id=trace_id)
+    result["trace_id"] = trace_id
     # Serialize CrisisAlert nếu có
     if result.get("alert"):
         result["alert"] = result["alert"].model_dump()
@@ -113,11 +119,13 @@ def api_dfa(req: ContractRequest):
     n8n Step 2 — Data & Finance Agent
     Đọc cashflow, invoices, bank_txn → trả FinancialProposal + log
     """
+    trace_id = req.trace_id or str(uuid.uuid4())
     agent = DataFinanceAgent()
-    result = agent.run({"contract_id": req.contract_id})
+    result = agent.run({"contract_id": req.contract_id, "trace_id": trace_id})
     return {
         "output": result["output"].model_dump(),
-        "log":    result["log"].model_dump()
+        "log":    result["log"].model_dump(),
+        "trace_id": trace_id
     }
 
 
@@ -132,11 +140,13 @@ def api_rca(req: RCARequest):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid financial_proposal: {e}")
 
+    trace_id = req.trace_id or str(uuid.uuid4())
     agent = RiskComplianceAgent()
-    result = agent.run({"financial_proposal": financial})
+    result = agent.run({"financial_proposal": financial, "trace_id": trace_id})
     return {
         "output": result["output"].model_dump(),
-        "log":    result["log"].model_dump()
+        "log":    result["log"].model_dump(),
+        "trace_id": trace_id
     }
 
 
@@ -152,15 +162,18 @@ def api_dpa(req: DPARequest):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid input: {e}")
 
+    trace_id = req.trace_id or str(uuid.uuid4())
     agent = DecisionPartnerAgent()
     result = agent.run({
         "financial_proposal": financial,
         "risk_assessment":    risk,
-        "crisis_resolved":    req.crisis_resolved
+        "crisis_resolved":    req.crisis_resolved,
+        "trace_id":           trace_id
     })
     return {
         "output": result["output"].model_dump(),
-        "log":    result["log"].model_dump()
+        "log":    result["log"].model_dump(),
+        "trace_id": trace_id
     }
 
 
@@ -192,7 +205,8 @@ def api_build_output(req: BuildOutputRequest):
         financial_proposal=financial,
         risk_assessment=risk,
         decision_card=decision,
-        agent_logs=[]
+        agent_logs=[],
+        trace_id=req.trace_id or ""
     )
 
 
@@ -269,6 +283,7 @@ def get_contracts():
                 "description":    r.get("description", ""),
                 "contract_value": _safe_float(r.get("contract_value", 0)),
                 "gross_margin":   _safe_float(r.get("gross_margin", 0)),
+                "concentration_pct": r.get("concentration_pct", 0.0),
                 "status":         r.get("status", "Active"),
                 "start_date":     r.get("start_date", ""),
                 "end_date":       r.get("end_date", ""),
@@ -347,14 +362,35 @@ def memory_invalidate():
     return {"status": "cache cleared"}
 
 
-_DECISION_SECRET = "opc-flowmind-2024"
+_DECISION_SECRET = os.getenv("DECISION_TOKEN_SECRET", "")
+if not _DECISION_SECRET:
+    print("[WARN] DECISION_TOKEN_SECRET chưa được cấu hình trong .env — "
+          "link phê duyệt qua email sẽ không xác thực được.")
 _VALID_ACTIONS   = {"KY", "KHONG_KY", "YEU_CAU"}
 _VALID_INTERVALS = {"off", "every30min", "every1h", "every2h", "every4h", "daily8am"}
+_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 3600  # 7 ngày — đủ thời gian founder xử lý email từ xa
 
 
-def _make_token(contract_id: str, action: str) -> str:
-    raw = f"{contract_id}:{action}:{_DECISION_SECRET}"
-    return hashlib.md5(raw.encode()).hexdigest()
+def _make_token(contract_id: str, action: str, issued_at: int) -> str:
+    """HMAC-SHA256(secret, contract_id:action:issued_at) — issued_at nhúng thẳng vào
+    token nên có thể tự kiểm tra hết hạn mà không cần lưu trạng thái phía server."""
+    import hmac
+    raw = f"{contract_id}:{action}:{issued_at}"
+    sig = hmac.new(_DECISION_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    return f"{issued_at}.{sig}"
+
+
+def _verify_token(contract_id: str, action: str, token: str) -> bool:
+    import hmac, time
+    try:
+        issued_at_str, _sig = token.split(".", 1)
+        issued_at = int(issued_at_str)
+    except (ValueError, IndexError):
+        return False
+    if time.time() - issued_at > _TOKEN_MAX_AGE_SECONDS:
+        return False
+    expected = _make_token(contract_id, action, issued_at)
+    return hmac.compare_digest(token, expected)
 
 
 @app.get("/decision", response_class=HTMLResponse)
@@ -366,8 +402,7 @@ def founder_decision(contract: str = "", action: str = "", token: str = ""):
     if action not in _VALID_ACTIONS:
         return HTMLResponse(_html_error("Hành động không hợp lệ", f"action={action} không được hỗ trợ."), status_code=400)
 
-    expected = _make_token(contract, action)
-    if token != expected:
+    if not _verify_token(contract, action, token):
         return HTMLResponse(_html_error("Xác thực thất bại", "Token không đúng hoặc đã hết hạn."), status_code=403)
 
     # Store decision in memory

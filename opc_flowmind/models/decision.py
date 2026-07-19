@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 from typing import Optional, Literal
 
+class Reason(BaseModel):
+    text: str
+    source_sheet: str
+    source_cell: str
+
 class BankOption(BaseModel):
     bank: str
     product_name: str
@@ -18,9 +23,10 @@ class DecisionCard(BaseModel):
     contract_id: str
     recommendation: Literal["KY", "KY_CO_DIEU_KIEN", "KHONG_KY", "CHUA_DU_DU_LIEU"]
     confidence_score: float
-    reasons: list[str]
+    reasons: list[Reason]
     bank_options: list[BankOption]
     preconditions: list[str]
+    guard_condition: str  # điều kiện bảo vệ nổi bật nhất — 1 câu duy nhất cho Decision Card
     human_approval_required: bool = True
     approval_checklist: list[str]
     narrative: str

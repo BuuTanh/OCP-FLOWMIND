@@ -1,5 +1,5 @@
 from agents.base_agent import BaseAgent
-from models.decision import DecisionCard, BankOption
+from models.decision import DecisionCard, BankOption, Reason
 from models.financial import FinancialProposal
 from models.risk import RiskAssessment
 from data import loader
@@ -8,6 +8,19 @@ from openai_engine.prompts import DPA_SYSTEM, DPA_USER_TEMPLATE
 from openai_engine.validator import validate_recommendation
 from config import CONFIDENCE_THRESHOLD
 import json, re
+
+# Ánh xạ topic (do OpenAI gắn nhãn) → sheet/cell nguồn thật.
+# Ánh xạ này do code định nghĩa cố định, KHÔNG do OpenAI sinh ra — tránh việc
+# source_sheet/source_cell bị "diễn giải cho hợp lý" thay vì trỏ đúng dữ liệu gốc.
+TOPIC_SOURCE_MAP: dict[str, tuple[str, str]] = {
+    "MARGIN": ("06_ORDERS", "gross_margin_actual"),
+    "CASHFLOW": ("09_CASHFLOW", "closing_cash_by_month"),
+    "CREDIT": ("10_CREDIT_PROFILE", "eligibility_score"),
+    "RISK": ("13_RISK_RULES", "overall_risk_level"),
+    "DELIVERY": ("06_ORDERS", "delivery_note"),
+    "CONCENTRATION": ("04_CONTRACTS", "contract_value_share"),
+}
+UNTRACEABLE_SOURCE = ("Không xác định", "Không xác định")
 
 class DecisionPartnerAgent(BaseAgent):
     name = "Decision & Partner Agent"
@@ -52,7 +65,7 @@ class DecisionPartnerAgent(BaseAgent):
             f"Trả về JSON: {{\"CR-001\": [\"hạng mục A\"], \"CR-002\": []}}"
         )
         try:
-            result_text, _ = self.safe_openai_call(system, user)
+            result_text, _, _ = self.safe_openai_call(system, user)
             match = re.search(r'\{[\s\S]+\}', result_text)
             if match:
                 raw: dict = json.loads(match.group())
@@ -86,6 +99,7 @@ class DecisionPartnerAgent(BaseAgent):
         financial: FinancialProposal = context["financial_proposal"]
         risk: RiskAssessment         = context["risk_assessment"]
         contract_id = financial.target_contract_id
+        trace_id = context.get("trace_id", "")
         crisis_resolved: bool          = context.get("crisis_resolved", False)
         resolved_items: list[str]      = context.get("resolved_items", [])
         resolved_credit_items: list[str] = context.get("resolved_credit_items", [])
@@ -264,6 +278,23 @@ class DecisionPartnerAgent(BaseAgent):
             preconditions.append(f"Bổ sung chứng từ cho: {blocked_cases}")
         preconditions.append(f"{contract_id} phải ký chính thức trước khi nộp hồ sơ ngân hàng")
 
+        # guard_condition: MỘT điều kiện bảo vệ duy nhất nổi bật nhất cho Decision Card
+        # (yêu cầu thể lệ vòng bán kết) — ưu tiên theo mức độ nghiêm trọng, luôn có giá trị.
+        if financial.suspicious_txn_ids:
+            guard_condition = (
+                f"Chỉ hiệu lực sau khi Founder xác nhận xử lý giao dịch đáng ngờ "
+                f"{', '.join(financial.suspicious_txn_ids)}"
+            )
+        elif not margin_ok:
+            guard_condition = (
+                f"Chỉ hiệu lực nếu biên lợi nhuận được kiểm soát không giảm thêm dưới "
+                f"{financial.gross_margin_actual:.0%} hiện tại (mục tiêu ≥28%)"
+            )
+        elif blocked_cases:
+            guard_condition = f"Chỉ hiệu lực sau khi bổ sung đầy đủ chứng từ cho: {', '.join(blocked_cases)}"
+        else:
+            guard_condition = f"Chỉ hiệu lực sau khi {contract_id} được ký kết chính thức trước khi nộp hồ sơ ngân hàng"
+
         # Approval checklist tự sinh từ data thực — không hardcode
         approval_checklist = []
 
@@ -347,16 +378,28 @@ class DecisionPartnerAgent(BaseAgent):
             bank_products=json.dumps(products_masked, ensure_ascii=False),
             pending_checklist=pending_str
         )
-        narrative, call_id = self.safe_openai_call(DPA_SYSTEM, user_prompt)
+        narrative, call_id, prompt_hash = self.safe_openai_call(DPA_SYSTEM, user_prompt)
 
-        # Parse structured reasons từ output OpenAI — chấp nhận 2-4 lý do
-        reasons = []
+        # Parse structured reasons từ output OpenAI — Decision Card luôn cố định ĐÚNG 3 lý do
+        # (yêu cầu thể lệ vòng bán kết: "phương án, ba lý do và một điều kiện bảo vệ").
+        # source_sheet/source_cell được code gán qua TOPIC_SOURCE_MAP (không phải OpenAI bịa ra):
+        # OpenAI chỉ chọn nhãn topic + viết văn phong, code tự tra bảng để lấy nguồn dữ liệu thật.
+        reasons: list[Reason] = []
         narrative_text = narrative
         lines = narrative.split("\n")
         for line in lines:
-            m = re.search(r'REASON_(\d+):\s*(.+)', line)
+            m = re.search(r'REASON_(\d+):\s*\[(\w+)\]\s*(.+)', line)
             if m:
-                reasons.append(m.group(2).strip())
+                topic = m.group(2).strip().upper()
+                text = m.group(3).strip()
+                source_sheet, source_cell = TOPIC_SOURCE_MAP.get(topic, UNTRACEABLE_SOURCE)
+                reasons.append(Reason(text=text, source_sheet=source_sheet, source_cell=source_cell))
+                continue
+            # OpenAI trả reason nhưng bỏ sót nhãn topic — giữ lại text, khai báo thẳng là
+            # không tra được nguồn thay vì tự suy đoán/bịa sheet-cell.
+            m2 = re.search(r'REASON_(\d+):\s*(.+)', line)
+            if m2:
+                reasons.append(Reason(text=m2.group(2).strip(), source_sheet=UNTRACEABLE_SOURCE[0], source_cell=UNTRACEABLE_SOURCE[1]))
         # Tách phần NARRATIVE ra riêng
         if "NARRATIVE:" in narrative:
             narrative_text = narrative.split("NARRATIVE:")[-1].strip()
@@ -364,7 +407,11 @@ class DecisionPartnerAgent(BaseAgent):
         if not reasons:
             skip_patterns = re.compile(r'REASON_\d:|NARRATIVE:|Recommendation:|Confidence:|^\s*$')
             fallback = [l.strip() for l in lines if l.strip() and not skip_patterns.search(l)]
-            reasons = fallback[:4] if fallback else ["[Xem narrative đầy đủ]"]
+            fallback_texts = fallback[:3] if fallback else ["[Xem narrative đầy đủ]"]
+            reasons = [Reason(text=t, source_sheet=UNTRACEABLE_SOURCE[0], source_cell=UNTRACEABLE_SOURCE[1]) for t in fallback_texts]
+        # Chốt cứng đúng 3 lý do bất kể OpenAI trả về bao nhiêu — không bịa thêm nếu thiếu,
+        # chỉ cắt bớt nếu thừa, để khớp định dạng bắt buộc của Decision Card.
+        reasons = reasons[:3]
 
         # Khi CHUA_DU_DU_LIEU, truyền missing_items để frontend hiển thị checklist bổ sung
         missing_items_for_card = missing_detail if recommendation == "CHUA_DU_DU_LIEU" else None
@@ -376,6 +423,7 @@ class DecisionPartnerAgent(BaseAgent):
             reasons=reasons,
             bank_options=bank_options,
             preconditions=preconditions,
+            guard_condition=guard_condition,
             human_approval_required=True,
             approval_checklist=approval_checklist,
             narrative=narrative_text,
@@ -393,7 +441,9 @@ class DecisionPartnerAgent(BaseAgent):
             openai_call_id=call_id,
             masked_fields=["customer_id", "requested_amount", "contract_value"],
             human_approval_required=True,
-            pipeline_status="completed"
+            pipeline_status="completed",
+            trace_id=trace_id,
+            prompt_hash=prompt_hash
         )
 
         return {"output": result, "log": agent_log}

@@ -12,6 +12,7 @@ import pandas as pd
 import io
 import requests
 import time
+from datetime import datetime
 from typing import Optional
 
 # ── Sheet IDs ────────────────────────────────────────────────────────────
@@ -45,6 +46,10 @@ SHEET_TAB_MAP = {
 _cache: dict[str, tuple[pd.DataFrame, float]] = {}
 CACHE_TTL = 300  # 5 minutes
 
+# 22_API_HANDLING_RULES: thử lại tối đa hai lần có giãn cách trước khi dùng dữ liệu đệm.
+MAX_RETRIES = 2
+RETRY_BACKOFF_SECONDS = 2
+
 
 def _csv_url(sheet_id: str, tab_name: str) -> str:
     import urllib.parse
@@ -70,16 +75,34 @@ def load_gsheet(key: str) -> pd.DataFrame:
     sheet_id = SHEET_IDS[group]
     url = _csv_url(sheet_id, tab_name)
 
-    try:
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text), dtype=str).fillna("")
-        _cache[key] = (df, now)
-        return df.copy()
-    except Exception as e:
-        # Fallback: nếu không đọc được Sheets, thử Excel local
-        print(f"[GSheet] Warning: cannot load {tab_name} from Sheets: {e}")
-        return _fallback_excel(key)
+    last_error: Optional[Exception] = None
+    for attempt in range(1, MAX_RETRIES + 2):  # lần đầu + tối đa 2 lần thử lại
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            df = pd.read_csv(io.StringIO(resp.text), dtype=str).fillna("")
+            _cache[key] = (df, now)
+            return df.copy()
+        except Exception as e:
+            last_error = e
+            if attempt <= MAX_RETRIES:
+                wait = RETRY_BACKOFF_SECONDS * attempt
+                print(f"[GSheet] {tab_name} lỗi lần {attempt}: {e} — thử lại sau {wait}s")
+                time.sleep(wait)
+
+    # Hết lượt thử lại: ưu tiên dữ liệu đệm gần nhất kèm nhãn thời điểm (dù đã quá TTL),
+    # chỉ rơi về Excel local khi phiên chạy này chưa từng fetch được key này lần nào.
+    if key in _cache:
+        cached_df, cached_ts = _cache[key]
+        age_min = (now - cached_ts) / 60
+        cached_at = datetime.fromtimestamp(cached_ts).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[GSheet] {tab_name}: thất bại sau {MAX_RETRIES} lần thử lại ({last_error}). "
+              f"Dùng dữ liệu đệm lúc {cached_at} ({age_min:.1f} phút trước).")
+        return cached_df.copy()
+
+    print(f"[GSheet] {tab_name}: thất bại sau {MAX_RETRIES} lần thử lại, không có dữ liệu đệm. "
+          f"Chuyển sang Excel local. Lỗi gốc: {last_error}")
+    return _fallback_excel(key)
 
 
 def _fallback_excel(key: str) -> pd.DataFrame:
@@ -122,6 +145,12 @@ def get_opc_profile() -> dict:
         return {}
     return dict(zip(df.iloc[:, 0], df.iloc[:, 1]))
 
+def _parse_amount(v) -> float:
+    try:
+        return float(str(v).replace(",", "").replace("%", ""))
+    except (ValueError, TypeError):
+        return 0.0
+
 def get_contracts() -> list[dict]:
     df = load_gsheet("contracts")
     records = df.to_dict("records")
@@ -134,6 +163,12 @@ def get_contracts() -> list[dict]:
         for col in ("start_date", "end_date"):
             if col in r and str(r[col]).isdigit():
                 r[col] = _excel_serial_to_date(int(r[col]))
+    # concentration_pct (Phụ lục 2): tỷ trọng giá trị hợp đồng trên tổng giá trị danh mục,
+    # tính động theo toàn bộ danh mục hiện có — không hardcode.
+    total_value = sum(_parse_amount(r.get("contract_value", 0)) for r in records)
+    for r in records:
+        cv = _parse_amount(r.get("contract_value", 0))
+        r["concentration_pct"] = round(cv / total_value * 100, 1) if total_value > 0 else 0.0
     return records
 
 def get_customers() -> list[dict]:

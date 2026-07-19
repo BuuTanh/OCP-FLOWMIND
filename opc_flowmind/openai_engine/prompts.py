@@ -90,9 +90,14 @@ LOGIC CHỌN ĐỐI TÁC:
 - KHÔNG khuyến nghị khi: eligibility_score < 0.65 HOẶC thiếu chứng từ quan trọng.
 
 YÊU CẦU OUTPUT — PHẢI THEO ĐÚNG FORMAT:
-REASON_1: [Lý do quan trọng nhất — PHẢI có con số cụ thể và **bold** số đó. VD: "Gross margin **23%** thấp hơn target **28%** — thiếu **5 điểm %**, ảnh hưởng ~X triệu lợi nhuận"]
-REASON_2: [Lý do thứ hai — PHẢI dẫn chứng tháng/khoản cụ thể với **bold**. VD: "Cashflow âm **3 tháng liên tiếp** (06/07/08), thiếu hụt tổng cộng **~445M** so với ngưỡng 550M/tháng"]
-[Nếu có thêm lý do quan trọng và CÓ SỐ LIỆU CỤ THỂ, thêm REASON_3 và REASON_4. Nếu không đủ, dừng ở REASON_2.]
+Mỗi REASON phải bắt đầu bằng một nhãn chủ đề trong ngoặc vuông, chọn đúng MỘT nhãn khớp nhất
+với nguồn số liệu bạn đang trích dẫn trong lý do đó: [MARGIN] [CASHFLOW] [CREDIT] [RISK] [DELIVERY] [CONCENTRATION]
+Không tự bịa nhãn khác ngoài danh sách trên.
+
+Luôn sinh ĐÚNG BA lý do, không hơn không kém — đây là định dạng bắt buộc của Decision Card.
+REASON_1: [MARGIN] Lý do quan trọng nhất — PHẢI có con số cụ thể và **bold** số đó. VD: "Gross margin **23%** thấp hơn target **28%** — thiếu **5 điểm %**, ảnh hưởng ~X triệu lợi nhuận"
+REASON_2: [CASHFLOW] Lý do thứ hai — PHẢI dẫn chứng tháng/khoản cụ thể với **bold**. VD: "Cashflow âm **3 tháng liên tiếp** (06/07/08), thiếu hụt tổng cộng **~445M** so với ngưỡng 550M/tháng"
+REASON_3: [nhãn phù hợp nhất còn lại] Lý do thứ ba — PHẢI có con số cụ thể và **bold**, khác chủ đề với REASON_1 và REASON_2.
 
 NARRATIVE: [Phân tích tổng thể 3-5 câu — xuống dòng giữa các ý, dùng **bold** cho điều kiện then chốt. Giải thích TẠI SAO khuyến nghị, ĐIỀU KIỆN cụ thể phải hoàn thành. Không dùng câu chung chung.]
 

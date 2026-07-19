@@ -13,6 +13,7 @@ class DataFinanceAgent(BaseAgent):
 
     def run(self, context: dict) -> dict:
         contract_id = context.get("contract_id", TARGET_CONTRACT_ID)
+        trace_id = context.get("trace_id", "")
 
         cashflow  = loader.get_cashflow()
         contracts = loader.get_contracts()
@@ -100,7 +101,7 @@ class DataFinanceAgent(BaseAgent):
             receivables_pipeline_band=mask_amount(receivable_pipeline),
             suspicious_txns=suspicious_txns or "None"
         )
-        narrative, call_id = self.safe_openai_call(DFA_SYSTEM, user_prompt)
+        narrative, call_id, prompt_hash = self.safe_openai_call(DFA_SYSTEM, user_prompt)
 
         check = validate_financial_narrative(narrative, cashflow)
         if not check["ok"]:
@@ -138,7 +139,9 @@ class DataFinanceAgent(BaseAgent):
             openai_call_id=call_id,
             masked_fields=["contract_value", "invoice_amount", "amount"],
             human_approval_required=False,
-            pipeline_status="completed"
+            pipeline_status="completed",
+            trace_id=trace_id,
+            prompt_hash=prompt_hash
         )
 
         return {"output": result, "log": agent_log}

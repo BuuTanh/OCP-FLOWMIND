@@ -5,7 +5,7 @@ from data import loader
 from config import TRANSACTION_RISK_CRITICAL
 import uuid, datetime
 
-def run_crisis_scan() -> dict:
+def run_crisis_scan(trace_id: str = "") -> dict:
     bank_txn = loader.get_bank_txn()
 
     suspicious = [
@@ -36,12 +36,15 @@ def run_crisis_scan() -> dict:
 
     log = AgentLog(
         log_id=str(uuid.uuid4())[:8],
+        trace_id=trace_id,
         agent_name="Crisis Layer",
         task_id="CRISIS-001",
         timestamp=str(datetime.datetime.utcnow()),
         input_source=["08_BANK_TXN"],
         output_summary=f"CRISIS: {txn_ids} scores={risk_scores} → HOLD_PENDING",
         openai_call_id=None,
+        openai_service_used=None,
+        prompt_hash=None,
         masked_fields=["txn_id", "account_id"],
         human_approval_required=True,
         pipeline_status="blocked_crisis"

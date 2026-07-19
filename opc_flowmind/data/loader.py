@@ -63,7 +63,14 @@ def get_cashflow() -> list[dict]:
 
 def get_contracts() -> list[dict]:
     records = _load("contracts").to_dict("records")
-    return _normalize(records, ("gross_margin", "contract_value"))
+    records = _normalize(records, ("gross_margin", "contract_value"))
+    # concentration_pct (Phụ lục 2): tỷ trọng giá trị hợp đồng trên tổng giá trị danh mục,
+    # tính động theo toàn bộ danh mục hiện có — không hardcode.
+    total_value = sum(float(r.get("contract_value", 0) or 0) for r in records)
+    for r in records:
+        contract_value = float(r.get("contract_value", 0) or 0)
+        r["concentration_pct"] = round(contract_value / total_value * 100, 1) if total_value > 0 else 0.0
+    return records
 
 def get_orders() -> list[dict]:
     records = _load("orders").to_dict("records")

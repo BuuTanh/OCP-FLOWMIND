@@ -16,7 +16,14 @@ const RAILWAY_URL      = 'https://ocp-flowmind-production.up.railway.app';
 const CONTRACTS_SHEET  = '04_CONTRACTS';
 const RESULTS_SHEET    = 'AI_RESULTS';
 const NOTIFY_EMAIL_FALLBACK = 'tanhtlb23411@st.uel.edu.vn'; // dùng nếu chưa lưu email nào
-const DECISION_SECRET  = 'opc-flowmind-2024';
+// DECISION_SECRET không hardcode ở đây (repo public) — set qua:
+// Extensions → Apps Script → Project Settings → Script Properties → key "DECISION_SECRET"
+// Giá trị PHẢI khớp với DECISION_TOKEN_SECRET trong .env của backend Railway.
+function _getDecisionSecret() {
+  const v = PropertiesService.getScriptProperties().getProperty('DECISION_SECRET');
+  if (!v) throw new Error('Chưa cấu hình DECISION_SECRET trong Script Properties.');
+  return v;
+}
 
 // Tên các cột bắt buộc trước khi phân tích
 const REQUIRED_FIELDS = ['contract_id', 'customer_id', 'contract_value', 'gross_margin', 'start_date', 'end_date'];
@@ -228,7 +235,9 @@ function writeResult(contractId, result) {
                      ? (result.zone_decision.confidence_score * 100).toFixed(0) + '%' : '—';
   const alerts     = (result?.zone_decision?.risk_alerts || []).length;
   const crisis     = result?.zone_workflow?.crisis_layer?.active ? '⚠ CÓ' : 'Không';
-  const note       = (result?.zone_decision?.three_reasons || []).slice(0, 2).join(' | ');
+  const note       = (result?.zone_decision?.three_reasons || [])
+                     .map(r => (r && typeof r === 'object') ? r.text : r)
+                     .slice(0, 2).join(' | ');
 
   // email_sent để trống — runScheduled sẽ điền timestamp sau khi gửi digest
   sheet.appendRow([new Date().toLocaleString('vi-VN'), contractId, rec, confidence, alerts, crisis, note, '']);
@@ -248,11 +257,16 @@ function sendSingleEmail(contractId, result) {
   const crisis     = result?.zone_workflow?.crisis_layer?.active;
   const mdToHtml = s => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
   const reasons    = (result?.zone_decision?.three_reasons || [])
-                     .map((r, i) => `<li style="margin-bottom:6px">${i+1}. ${mdToHtml(r)}</li>`).join('');
+                     .map((r, i) => {
+                       const t = (r && typeof r === 'object') ? r.text : r;
+                       const src = (r && typeof r === 'object' && r.source_sheet)
+                                   ? ` <span style="color:#9ca3af;font-size:12px">(Nguồn: ${r.source_sheet}.${r.source_cell})</span>` : '';
+                       return `<li style="margin-bottom:6px">${i+1}. ${mdToHtml(t)}${src}</li>`;
+                     }).join('');
   const recColor   = rec === 'KY' ? '#1e7e34' : rec === 'KHONG_KY' ? '#c0392b' : rec === 'CHUA_DU_DU_LIEU' ? '#7f8c8d' : '#e67e22';
   const recLabel   = rec === 'KY' ? '✅ KÝ HỢP ĐỒNG' : rec === 'KHONG_KY' ? '❌ KHÔNG KÝ' : rec === 'CHUA_DU_DU_LIEU' ? '⏳ CHƯA ĐỦ DỮ LIỆU' : '⚠ KÝ CÓ ĐIỀU KIỆN';
 
-  // Tạo token cho từng nút quyết định
+  // Tạo token cho từng nút quyết định (kèm issued_at để phía server tự kiểm tra hết hạn)
   const tokenKy      = _makeToken(contractId, 'KY');
   const tokenKhongKy = _makeToken(contractId, 'KHONG_KY');
   const tokenYeuCau  = _makeToken(contractId, 'YEU_CAU');
@@ -426,11 +440,18 @@ function markAnalyzed(contractId) {
   PropertiesService.getScriptProperties().setProperty('analyzed_' + contractId, '1');
 }
 
-/** MD5 token cho decision buttons — phải khớp với _make_token() trong api.py */
+/**
+ * Token cho decision buttons — HMAC-SHA256(secret, contract:action:issued_at), dạng
+ * "issued_at.hexsignature". PHẢI khớp thuật toán với _make_token()/_verify_token()
+ * trong api.py (cùng công thức, cùng issued_at làm phần đầu token).
+ */
 function _makeToken(contractId, action) {
-  const raw   = contractId + ':' + action + ':' + DECISION_SECRET;
-  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw, Utilities.Charset.UTF_8);
-  return bytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const raw       = contractId + ':' + action + ':' + issuedAt;
+  const secret    = _getDecisionSecret();
+  const sigBytes  = Utilities.computeHmacSha256Signature(raw, secret, Utilities.Charset.UTF_8);
+  const hex       = sigBytes.map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
+  return issuedAt + '.' + hex;
 }
 
 // Lấy danh sách kết quả từ AI_RESULTS chưa gửi email (email_sent trống)

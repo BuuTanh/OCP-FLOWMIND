@@ -99,14 +99,15 @@ function fallbackAction(alert: RiskAlert): string {
     case 'RR-003': return `Review cơ cấu chi phí hợp đồng${r}. Đàm phán lại với nhà cung cấp hoặc điều chỉnh giá bán để đưa margin về ≥28%.`;
     case 'RR-004': return `Rà soát chứng từ xuất ra bên ngoài${r}. Yêu cầu hoàn trả hoặc xác nhận bằng văn bản nếu có phát sinh hợp lệ.`;
     case 'RR-005': return `Founder ký duyệt hồ sơ tín dụng${r} theo quy trình nội bộ. Lưu tờ trình phê duyệt vào Drive và cập nhật approval_status trong OPC_FinancialData.`;
-    case 'RR-006': return `Thu thập và bổ sung chứng từ còn thiếu cho${r}. Cập nhật precheck_note trong tab 10_CREDIT_PROFILE khi đã hoàn chỉnh.`;
+    case 'RR-006': return `Bổ sung dữ liệu hoặc đánh giá lại điều kiện tín dụng cho${r} — điểm tin cậy đang dưới ngưỡng khuyến nghị 65%. Cập nhật eligibility_score trong tab 10_CREDIT_PROFILE khi có căn cứ mới.`;
+    case 'DOC-CHECK': return `Thu thập và bổ sung chứng từ còn thiếu cho${r}. Cập nhật precheck_note trong tab 10_CREDIT_PROFILE khi đã hoàn chỉnh.`;
     case 'RR-007': return `Xác nhận kế hoạch xử lý với bên vận chuyển/nhà cung cấp cho${r}. Cập nhật delivery_note và trạng thái đơn hàng trong tab 06_ORDERS.`;
     default: return `Xem xét và xử lý cảnh báo${r} theo quy trình nội bộ. Chuyển sang Pipeline để xem hướng dẫn chi tiết và tick hoàn thành trong checklist phê duyệt.`;
   }
 }
 
 type SeverityFilter = 'All' | 'Critical' | 'High' | 'Medium';
-type RuleId = 'All' | 'RR-001' | 'RR-002' | 'RR-003' | 'RR-004' | 'RR-005' | 'RR-006' | 'RR-007' | '14_ALERTS';
+type RuleId = 'All' | 'RR-001' | 'RR-002' | 'RR-003' | 'RR-004' | 'RR-005' | 'RR-006' | 'RR-007' | 'DOC-CHECK' | '14_ALERTS';
 
 const RULE_LABELS: Record<string, string> = {
   'RR-001': 'TXN rủi ro cao',
@@ -114,8 +115,9 @@ const RULE_LABELS: Record<string, string> = {
   'RR-003': 'Margin thấp',
   'RR-004': 'Chứng từ ra ngoài',
   'RR-005': 'Khoản vay lớn',
-  'RR-006': 'Thiếu chứng từ',
+  'RR-006': 'Điểm tin cậy thấp',
   'RR-007': 'Trễ giao hàng',
+  'DOC-CHECK': 'Thiếu chứng từ',
   '14_ALERTS': 'Pre-existing alerts',
 };
 

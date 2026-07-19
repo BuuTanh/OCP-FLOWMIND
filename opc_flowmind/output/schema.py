@@ -1,8 +1,9 @@
 def build_final_output(crisis_result, financial_proposal, risk_assessment,
-                       decision_card, agent_logs) -> dict:
+                       decision_card, agent_logs, trace_id: str = "") -> dict:
     return {
         "meta": {
             "contract_id": financial_proposal.target_contract_id,
+            "trace_id": trace_id or (agent_logs[0].get("trace_id", "") if agent_logs else ""),
             "generated_at": str(__import__("datetime").datetime.utcnow()),
             "system": "OPC FlowMind v1.0"
         },
@@ -66,7 +67,8 @@ def build_final_output(crisis_result, financial_proposal, risk_assessment,
             "recommendation": decision_card.recommendation,
             "confidence_score": decision_card.confidence_score,
             "confidence_ok": decision_card.confidence_score >= 0.65,
-            "three_reasons": decision_card.reasons,
+            "three_reasons": [r.model_dump() for r in decision_card.reasons],
+            "guard_condition": decision_card.guard_condition,
             "bank_options": [
                 {
                     "bank": opt.bank,

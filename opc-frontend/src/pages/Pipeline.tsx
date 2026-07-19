@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import { Play, CheckCircle, AlertTriangle, Loader, ChevronDown, ChevronUp,
          XCircle, Clock, FileCheck, Banknote, X, ArrowRight, User, Target, Database, History,
-         PenLine, ThumbsDown, ClipboardList, RotateCcw } from 'lucide-react';
+         PenLine, ThumbsDown, ClipboardList, RotateCcw, GitBranch, Shield, TrendingDown, TrendingUp,
+         type LucideIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useApi } from '../hooks/useApi';
 import { StatusBadge } from '../components/StatusBadge';
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, CashflowMonth } from '../types';
 import type { ContractDecision } from '../context/AppContext';
 
 const CONTRACTS_FALLBACK: string[] = [];
@@ -356,9 +358,15 @@ function ConfirmSignModal({ contractId, decision, resolvedCount, totalChecklist,
             <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
               <div className="text-xs font-semibold text-green-700 mb-2">Lý do AI đề xuất ký:</div>
               <ul className="space-y-1">
-                {decision.three_reasons.map((r: string, i: number) => (
+                {decision.three_reasons.map((r, i: number) => (
                   <li key={i} className="text-sm text-green-800 flex gap-2">
-                    <span className="text-green-500 shrink-0">✓</span> {r}
+                    <span className="text-green-500 shrink-0">✓</span>
+                    <span>
+                      {r.text}
+                      <span className="text-green-600/70 text-xs ml-1">
+                        (Nguồn: {r.source_sheet}.{r.source_cell})
+                      </span>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -561,6 +569,122 @@ function StepCard({ step, expanded, onToggle }: { step: { agent: string; status:
           {renderMd(step.summary || 'Không có thông tin chi tiết.')}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Zone Header — 3 vùng bắt buộc: Input Data / Agent Workflow / Decision Dashboard ──
+function ZoneHeader({ number, title, subtitle, icon: Icon, accent }: {
+  number: string; title: string; subtitle: string; icon: LucideIcon; accent: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm ${accent}`}>
+        {number}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Icon size={14} className="text-slate-400 shrink-0" />
+          <h2 className="text-sm font-bold text-slate-800 tracking-wide uppercase truncate">{title}</h2>
+        </div>
+        <p className="text-xs text-slate-400 mt-0.5 truncate">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function formatM(v: number) {
+  if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)} tỷ`;
+  return `${(v / 1e6).toFixed(0)}M`;
+}
+
+function cashBarColor(status: string) {
+  if (status === 'CRITICAL') return '#ef4444';
+  if (status === 'WARNING') return '#f59e0b';
+  return '#22c55e';
+}
+
+const DATA_CONFIDENCE_STYLE: Record<string, string> = {
+  Verified: 'bg-green-100 text-green-700 border-green-200',
+  Partial: 'bg-amber-100 text-amber-700 border-amber-200',
+  Estimated: 'bg-slate-100 text-slate-600 border-slate-200',
+};
+
+// ── Vùng 1: Dữ liệu đầu vào (Input Data) ──────────────────────────────────────
+function InputDataZone({ zoneInput }: { zoneInput: AnalysisResult['zone_input'] }) {
+  const cashflow = zoneInput.cashflow_chart || [];
+  const criticalMonths = cashflow.filter(c => c.status === 'CRITICAL').length;
+  const warningMonths = cashflow.filter(c => c.status === 'WARNING').length;
+  const confStyle = DATA_CONFIDENCE_STYLE[zoneInput.data_confidence] || DATA_CONFIDENCE_STYLE.Estimated;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3 bg-gradient-to-r from-blue-50/60 to-transparent">
+        <ZoneHeader
+          number="01"
+          title="Dữ liệu đầu vào"
+          subtitle="Input Data · nguồn Google Sheets OPC_CoreData / OPC_FinancialData"
+          icon={Database}
+          accent="bg-blue-600"
+        />
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border shrink-0 ${confStyle}`}>
+          Độ tin cậy dữ liệu: {zoneInput.data_confidence}
+        </span>
+      </div>
+
+      <div className="p-5 space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-slate-50 rounded-xl p-3.5 flex items-center gap-3">
+            <span className={`p-2 rounded-lg bg-white shrink-0 ${criticalMonths > 0 ? 'text-red-500' : 'text-green-500'}`}>
+              <AlertTriangle size={16} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-lg font-bold text-slate-800 leading-tight">{criticalMonths}</div>
+              <div className="text-xs text-slate-500 truncate">tháng CRITICAL · {warningMonths} WARNING</div>
+            </div>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3.5 flex items-center gap-3">
+            <span className="p-2 rounded-lg bg-white shrink-0 text-red-500"><TrendingDown size={16} /></span>
+            <div className="min-w-0">
+              <div className="text-lg font-bold text-slate-800 leading-tight">{formatM(zoneInput.receivables?.open_vnd || 0)}</div>
+              <div className="text-xs text-slate-500 truncate">Công nợ mở (Open AR)</div>
+            </div>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3.5 flex items-center gap-3">
+            <span className="p-2 rounded-lg bg-white shrink-0 text-amber-500"><TrendingUp size={16} /></span>
+            <div className="min-w-0">
+              <div className="text-lg font-bold text-slate-800 leading-tight">{formatM(zoneInput.receivables?.pipeline_vnd || 0)}</div>
+              <div className="text-xs text-slate-500 truncate">Pipeline chưa xuất HĐ</div>
+            </div>
+          </div>
+        </div>
+
+        {cashflow.length > 0 && (
+          <div className="bg-slate-50/60 border border-slate-100 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-slate-600">Dòng tiền dự báo theo tháng</span>
+              <span className="text-xs text-slate-400">Ngưỡng tối thiểu: 550M VND</span>
+            </div>
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={cashflow} margin={{ top: 5, right: 8, bottom: 0, left: 0 }}>
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v => `${v / 1e6}M`} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
+                <Tooltip
+                  formatter={(v) => formatM(Number(v))}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1} />
+                <ReferenceLine y={550_000_000} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} />
+                <Bar dataKey="projected_closing_cash" radius={[3, 3, 0, 0]} maxBarSize={36}>
+                  {cashflow.map((entry: CashflowMonth, index: number) => (
+                    <Cell key={index} fill={cashBarColor(entry.status)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1005,59 +1129,83 @@ export function Pipeline() {
         );
       })()}
 
-      {/* Crisis Layer */}
-      {result && (
-        <div className={`rounded-xl border p-5 ${result.zone_workflow.crisis_layer.active
-          ? (crisisResolved ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')
-          : 'bg-slate-50 border-slate-200'}`}>
-          <div className="flex items-center gap-2 font-semibold text-sm text-slate-800 mb-2">
-            {result.zone_workflow.crisis_layer.active
-              ? (crisisResolved ? <CheckCircle size={16} className="text-green-500" /> : <AlertTriangle size={16} className="text-red-500" />)
-              : <CheckCircle size={16} className="text-slate-400" />}
-            Crisis Layer
-            {result.zone_workflow.crisis_layer.active && !crisisResolved && (
-              <span className="ml-2 text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full font-medium">ACTIVE</span>
-            )}
-            {crisisResolved && (
-              <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">RESOLVED</span>
-            )}
-          </div>
-          <p className="text-xs text-slate-600">
-            {result.zone_workflow.crisis_layer.active
-              ? (() => {
-                  const txnIds = result.zone_workflow.crisis_layer.alert?.txn_ids ?? [];
-                  const list = txnIds.join(', ') || 'N/A';
-                  return crisisResolved
-                    ? `Founder đã xác nhận xử lý ${list}. Pipeline tiếp tục với điều kiện các mục khác được hoàn thành.`
-                    : `${list} có điểm rủi ro > 85 — cần Founder xác nhận. Bật "Crisis resolved" sau khi đã xử lý với ngân hàng.`;
-                })()
-              : 'Không có giao dịch đáng ngờ nào được phát hiện.'}
-          </p>
-        </div>
-      )}
+      {/* Vùng 1 — Dữ liệu đầu vào (Input Data) */}
+      {result && <InputDataZone zoneInput={result.zone_input} />}
 
-      {/* Pipeline steps */}
+      {/* Vùng 2 — Luồng Agent (Agent Workflow) */}
       {result && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700">Pipeline Agents</h2>
-          {result.zone_workflow.pipeline.map((step, i) => (
-            <StepCard
-              key={i}
-              step={step}
-              expanded={expandedSteps.has(i)}
-              onToggle={() => setExpandedSteps(prev => {
-                const next = new Set(prev);
-                next.has(i) ? next.delete(i) : next.add(i);
-                return next;
-              })}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50/60 to-transparent">
+            <ZoneHeader
+              number="02"
+              title="Luồng Agent"
+              subtitle="Agent Workflow · Data & Finance → Risk & Compliance → Decision & Partner"
+              icon={GitBranch}
+              accent="bg-indigo-600"
             />
-          ))}
+          </div>
+          <div className="p-5 space-y-4">
+            {/* Crisis Layer */}
+            <div className={`rounded-xl border p-5 ${result.zone_workflow.crisis_layer.active
+              ? (crisisResolved ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')
+              : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center gap-2 font-semibold text-sm text-slate-800 mb-2">
+                {result.zone_workflow.crisis_layer.active
+                  ? (crisisResolved ? <CheckCircle size={16} className="text-green-500" /> : <AlertTriangle size={16} className="text-red-500" />)
+                  : <CheckCircle size={16} className="text-slate-400" />}
+                Crisis Layer
+                {result.zone_workflow.crisis_layer.active && !crisisResolved && (
+                  <span className="ml-2 text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full font-medium">ACTIVE</span>
+                )}
+                {crisisResolved && (
+                  <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">RESOLVED</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600">
+                {result.zone_workflow.crisis_layer.active
+                  ? (() => {
+                      const txnIds = result.zone_workflow.crisis_layer.alert?.txn_ids ?? [];
+                      const list = txnIds.join(', ') || 'N/A';
+                      return crisisResolved
+                        ? `Founder đã xác nhận xử lý ${list}. Pipeline tiếp tục với điều kiện các mục khác được hoàn thành.`
+                        : `${list} có điểm rủi ro > 85 — cần Founder xác nhận. Bật "Crisis resolved" sau khi đã xử lý với ngân hàng.`;
+                    })()
+                  : 'Không có giao dịch đáng ngờ nào được phát hiện.'}
+              </p>
+            </div>
+
+            {/* Pipeline steps */}
+            <div className="space-y-3">
+              {result.zone_workflow.pipeline.map((step, i) => (
+                <StepCard
+                  key={i}
+                  step={step}
+                  expanded={expandedSteps.has(i)}
+                  onToggle={() => setExpandedSteps(prev => {
+                    const next = new Set(prev);
+                    next.has(i) ? next.delete(i) : next.add(i);
+                    return next;
+                  })}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Decision Card */}
+      {/* Vùng 3 — Bảng quyết định (Decision Dashboard) */}
       {decision && rec && (
-        <div className="space-y-4">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50/60 to-transparent">
+            <ZoneHeader
+              number="03"
+              title="Bảng quyết định"
+              subtitle="Decision Dashboard · Decision & Partner Agent"
+              icon={Target}
+              accent="bg-emerald-600"
+            />
+          </div>
+        <div className="p-5 space-y-4">
           <div className={`rounded-xl border-2 p-5 ${REC_COLORS[rec]}`}>
             {/* Header: trạng thái + confidence */}
             <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
@@ -1073,15 +1221,29 @@ export function Pipeline() {
             )}
           </div>
 
+          {/* Điều kiện bảo vệ — 1 điều kiện duy nhất, nổi bật, đi kèm phương án + 3 lý do */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-start gap-3">
+            <span className="p-2 rounded-lg bg-white text-amber-600 shrink-0"><Shield size={16} /></span>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Điều kiện bảo vệ</div>
+              <p className="text-sm text-amber-900 leading-relaxed">{decision.guard_condition}</p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             {/* Reasons */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Lý do chính ({(decision.three_reasons || []).length})</h3>
+              <h3 className="text-sm font-semibold text-slate-800 mb-3">Ba lý do chính ({(decision.three_reasons || []).length})</h3>
               <ol className="space-y-3">
                 {(decision.three_reasons || []).map((r, i) => (
                   <li key={i} className="flex gap-3 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2.5 leading-relaxed">
                     <span className="font-bold text-brand-800 shrink-0 w-5">{i + 1}.</span>
-                    <span className="flex-1">{renderMd(r)}</span>
+                    <span className="flex-1">
+                      {renderMd(r.text)}
+                      <span className="block text-xs text-slate-400 mt-1">
+                        Nguồn: {r.source_sheet}.{r.source_cell}
+                      </span>
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -1378,6 +1540,7 @@ export function Pipeline() {
               </button>
             </div>
           )}
+        </div>
         </div>
       )}
 

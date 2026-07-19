@@ -5,7 +5,8 @@ from data import loader
 from data.masking import mask_payload_for_openai
 from openai_engine.prompts import RCA_SYSTEM, RCA_USER_TEMPLATE
 from config import (CASH_RESERVE_MINIMUM, TARGET_GROSS_MARGIN,
-                    HUMAN_APPROVAL_THRESHOLD, TRANSACTION_RISK_CRITICAL)
+                    HUMAN_APPROVAL_THRESHOLD, TRANSACTION_RISK_CRITICAL,
+                    CONFIDENCE_THRESHOLD)
 import json, re
 
 class RiskComplianceAgent(BaseAgent):
@@ -15,6 +16,7 @@ class RiskComplianceAgent(BaseAgent):
     def run(self, context: dict) -> dict:
         financial: FinancialProposal = context["financial_proposal"]
         contract_id = financial.target_contract_id
+        trace_id = context.get("trace_id", "")
 
         bank_txn       = loader.get_bank_txn()
         orders         = loader.get_orders()
@@ -128,15 +130,34 @@ class RiskComplianceAgent(BaseAgent):
                 ))
                 required_approvals.append(f"APPROVE_{cr['credit_case_id']}_before_submission")
 
-        # RR-006: Missing documents
+        # RR-006: hồ sơ tín dụng dưới ngưỡng điểm tin cậy 0.65 (mục 4.3 báo cáo)
         for cr in credit:
-            if "Missing" in cr.get("precheck_note", "") or cr.get("approval_status") == "Review":
+            try:
+                score = float(str(cr.get("eligibility_score", 0)).replace(",", "."))
+            except (ValueError, TypeError):
+                score = 0.0
+            if score < CONFIDENCE_THRESHOLD:
                 alerts.append(RiskAlert(
-                    alert_id=f"AL-DOC-{cr['credit_case_id']}",
+                    alert_id=f"AL-CONF-{cr['credit_case_id']}",
                     rule_id="RR-006",
                     related_record=cr["credit_case_id"],
                     severity="Medium",
                     risk_score=58,
+                    description=f"{cr['credit_case_id']}: điểm tin cậy {score:.0%} dưới ngưỡng khuyến nghị 65%",
+                    recommended_action="Yêu cầu bổ sung dữ liệu hoặc đánh giá lại điều kiện tín dụng",
+                    requires_human_approval=False
+                ))
+
+        # DOC-CHECK: thiếu chứng từ — kiểm tra bổ trợ nội bộ, không thuộc 7 quy tắc RR-001..RR-007
+        # chính thức của báo cáo (mục 4.3), nhưng vẫn cần cảnh báo cho founder.
+        for cr in credit:
+            if "Missing" in cr.get("precheck_note", "") or cr.get("approval_status") == "Review":
+                alerts.append(RiskAlert(
+                    alert_id=f"AL-DOC-{cr['credit_case_id']}",
+                    rule_id="DOC-CHECK",
+                    related_record=cr["credit_case_id"],
+                    severity="Medium",
+                    risk_score=55,
                     description=f"Thiếu chứng từ cho {cr['credit_case_id']}: {cr.get('precheck_note','')}",
                     recommended_action="Yêu cầu bổ sung chứng từ",
                     requires_human_approval=False
@@ -197,7 +218,7 @@ class RiskComplianceAgent(BaseAgent):
             needs_bond="Yes (CR-002, 420M)" if any("performance" in fn.need_type for fn in financial.funding_needs) else "No",
             doc_status=json.dumps(credit_masked, ensure_ascii=False)
         )
-        narrative, call_id = self.safe_openai_call(RCA_SYSTEM, user_prompt)
+        narrative, call_id, prompt_hash = self.safe_openai_call(RCA_SYSTEM, user_prompt)
 
         blocked_by = None
         if not pipeline_ok:
@@ -218,7 +239,9 @@ class RiskComplianceAgent(BaseAgent):
             openai_call_id=call_id,
             masked_fields=["txn_id", "credit_case_id", "customer_id"],
             human_approval_required=len(required_approvals) > 0,
-            pipeline_status="completed" if pipeline_ok else "blocked"
+            pipeline_status="completed" if pipeline_ok else "blocked",
+            trace_id=trace_id,
+            prompt_hash=prompt_hash
         )
 
         return {"output": result, "log": agent_log}

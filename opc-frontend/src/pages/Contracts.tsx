@@ -115,6 +115,7 @@ export function Contracts() {
                 <th className="text-left px-6 py-3.5">Hợp đồng</th>
                 <th className="text-left px-6 py-3.5">Mô tả</th>
                 <th className="text-right px-6 py-3.5">Giá trị</th>
+                <th className="text-center px-6 py-3.5">Tỷ trọng</th>
                 <th className="text-center px-6 py-3.5">Margin</th>
                 <th className="text-center px-6 py-3.5">Trạng thái</th>
                 <th className="text-center px-6 py-3.5">Kết quả AI</th>
@@ -144,6 +145,11 @@ export function Contracts() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span className="text-sm font-semibold text-slate-800">{formatVnd(c.contract_value)}</span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`text-sm font-semibold ${c.concentration_pct >= 40 ? 'text-red-600' : 'text-slate-600'}`}>
+                        {c.concentration_pct.toFixed(1)}%
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <MarginBadge m={c.gross_margin} />

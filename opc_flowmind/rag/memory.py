@@ -50,6 +50,7 @@ def store_analysis(contract_id: str, analysis_result: dict) -> bool:
     rec = decision.get("recommendation", "")
     confidence = decision.get("confidence_score", 0)
     reasons = decision.get("three_reasons", [])
+    reason_texts = [r.get("text", "") if isinstance(r, dict) else r for r in reasons]
     narrative = decision.get("narrative", "")
 
     # Text để embed — tóm tắt ngắn gọn toàn bộ phân tích
@@ -57,7 +58,7 @@ def store_analysis(contract_id: str, analysis_result: dict) -> bool:
 Contract: {contract_id}
 Recommendation: {rec}
 Confidence: {confidence}
-Reasons: {' | '.join(reasons)}
+Reasons: {' | '.join(reason_texts)}
 Narrative: {narrative[:500]}
 Risk alerts: {len(decision.get('risk_alerts', []))} alerts
 Bank options: {len(decision.get('bank_options', []))} options
