@@ -1020,13 +1020,13 @@ export function Pipeline() {
     }
   }
 
-  const rec = result?.zone_decision.recommendation;
+  const rec = result?.zone_decision?.recommendation;
   const decision = result?.zone_decision;
 
   // Tích lũy checklist từ tất cả lần chạy của hợp đồng — item cũ không bao giờ bị mất
   const allStoredChecklists = runLog
     .filter(e => e.contractId === selectedContract && runResults[e.id])
-    .flatMap(e => runResults[e.id].zone_decision.approval_checklist ?? []);
+    .flatMap(e => runResults[e.id].zone_decision?.approval_checklist ?? []);
   const seenTexts = new Set<string>();
   const mergedChecklist: string[] = [];
   for (const item of [...(decision?.approval_checklist ?? []), ...allStoredChecklists]) {
