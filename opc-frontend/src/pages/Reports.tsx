@@ -80,10 +80,7 @@ export function Reports() {
     <div className="space-y-5">
       {/* Header — screen only */}
       <div className="flex items-center justify-between print:hidden">
-        <div>
-          <h1 className="text-lg font-bold text-slate-800">Báo cáo</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Danh sách hợp đồng, khách hàng và tài chính — xuất PDF theo yêu cầu</p>
-        </div>
+        <p className="text-sm text-slate-500">Danh sách hợp đồng, khách hàng và tài chính — in hoặc xuất PDF theo yêu cầu</p>
         {loading && <RefreshCw size={14} className="animate-spin text-slate-400" />}
       </div>
 
@@ -119,7 +116,7 @@ export function Reports() {
             </div>
             <div className="flex items-center gap-2">
               <button onClick={load} className="text-xs text-slate-500 hover:text-brand-700 font-medium border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50">
-                Reload
+                Tải lại
               </button>
               <button
                 onClick={() => window.print()}

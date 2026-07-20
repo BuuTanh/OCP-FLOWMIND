@@ -54,14 +54,15 @@ export function Financial() {
     setLoading(true);
     setError(null);
     try {
-      const [cfData, recData] = await Promise.all([getCashflow(), getReceivables()]);
+      const cfData = await getCashflow();
       setCashflow(cfData);
-      setReceivablesData(recData);
     } catch (e) {
       setError('Không thể tải dữ liệu cashflow — đảm bảo backend đang chạy');
     } finally {
       setLoading(false);
     }
+    // Receivables là optional — lỗi không ảnh hưởng cashflow
+    getReceivables().then(setReceivablesData).catch(() => {});
   }
 
   useEffect(() => { loadCashflow(); }, []);

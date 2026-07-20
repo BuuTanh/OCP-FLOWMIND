@@ -7,26 +7,29 @@ import {
 import { useApp } from '../context/AppContext';
 import { NotificationPanel } from './NotificationPanel';
 
-const NAV_ITEMS = [
-  { to: '/guide', label: 'Hướng dẫn', icon: BookOpen },
-  { to: '/', label: 'Tổng quan điều hành', icon: LayoutDashboard, exact: true },
-  { to: '/reports', label: 'Báo cáo', icon: FileBarChart },
+const NAV_MAIN = [
+  { to: '/', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
   { to: '/pipeline', label: 'Thẩm định hợp đồng', icon: GitBranch },
-  { to: '/research', label: 'Thông tin phi tài chính', icon: SearchCheck },
+  { to: '/research', label: 'Nghiên cứu đối tác', icon: SearchCheck },
   { to: '/financial', label: 'Tài chính', icon: BarChart2 },
-  { to: '/risks', label: 'Rủi ro', icon: ShieldAlert, badge: true },
+  { to: '/risks', label: 'Rủi ro & Cảnh báo', icon: ShieldAlert, badge: true },
+  { to: '/reports', label: 'Báo cáo', icon: FileBarChart },
+];
+
+const NAV_UTILITY = [
+  { to: '/guide', label: 'Hướng dẫn', icon: BookOpen },
   { to: '/settings', label: 'Cài đặt', icon: Settings },
 ];
 
 const PAGE_TITLES: Record<string, string> = {
-  '/guide': 'Hướng dẫn sử dụng & Kiến thức hệ thống',
   '/': 'Tổng quan điều hành',
-  '/reports': 'Báo cáo',
   '/pipeline': 'Thẩm định và khuyến nghị hợp đồng',
-  '/research': 'Thẩm định thông tin phi tài chính',
-  '/financial': 'Tài chính',
+  '/research': 'Nghiên cứu thông tin đối tác',
+  '/financial': 'Phân tích tài chính',
   '/risks': 'Rủi ro & Cảnh báo',
-  '/settings': 'Cài đặt',
+  '/reports': 'Báo cáo tổng hợp',
+  '/guide': 'Hướng dẫn sử dụng & Kiến thức hệ thống',
+  '/settings': 'Cài đặt hệ thống',
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -49,8 +52,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map(item => (
+        <nav className="flex-1 py-4 px-3 overflow-y-auto flex flex-col gap-0.5">
+          {NAV_MAIN.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -72,6 +75,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       {criticalCount}
                     </span>
                   )}
+                </>
+              )}
+            </NavLink>
+          ))}
+
+          {/* Divider */}
+          <div className="my-2 border-t border-white/10" />
+
+          {NAV_UTILITY.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-white/20 text-white'
+                    : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <item.icon size={17} className={isActive ? 'text-white' : 'text-blue-200'} />
+                  <span className="flex-1">{item.label}</span>
                 </>
               )}
             </NavLink>

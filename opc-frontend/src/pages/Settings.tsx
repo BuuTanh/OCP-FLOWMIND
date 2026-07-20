@@ -162,6 +162,11 @@ export function Settings() {
       {/* Email notifications */}
       <Section title="Thông báo Email">
         <div className="space-y-2">
+          {emails.length === 0 && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Chưa có email nhận thông báo — thêm ít nhất 1 địa chỉ bên dưới.
+            </p>
+          )}
           {emails.map(email => (
             <div key={email} className="flex items-center gap-2 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
               <span className="flex-1 font-mono text-xs">{email}</span>
@@ -185,14 +190,14 @@ export function Settings() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="text-xs font-semibold text-slate-600 mb-1">Loại thông báo</div>
-          {['Crisis alerts (ngay lập tức)', 'Báo cáo phân tích (sau mỗi lần chạy)', 'Tóm tắt hàng ngày'].map(type => (
-            <label key={type} className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer">
-              <input type="checkbox" defaultChecked className="accent-brand-700 w-4 h-4" />
-              {type}
-            </label>
-          ))}
+        <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-xs text-blue-800 space-y-1.5">
+          <p className="font-semibold">Các loại email được gửi tự động:</p>
+          <ul className="space-y-1 text-blue-700">
+            <li>• <strong>Mỗi khi có hợp đồng mới</strong> — 1 email riêng cho từng hợp đồng ngay sau khi phân tích xong</li>
+            <li>• <strong>Chế độ định kỳ (30 phút / 1h / …)</strong> — 1 email digest gộp tất cả hợp đồng đã phân tích trong kỳ</li>
+            <li>• <strong>Crisis alert</strong> — luôn gửi ngay lập tức dù đang ở chế độ nào</li>
+          </ul>
+          <p className="text-blue-600 mt-1">Cấu hình lịch gửi tại mục <strong>Tự động hóa</strong> bên dưới.</p>
         </div>
       </Section>
 
