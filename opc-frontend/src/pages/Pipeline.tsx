@@ -25,7 +25,8 @@ const SEVERITY_BADGE: Record<string, string> = {
 };
 
 // Render markdown-lite: **bold**, severity badges, bullet lists, line breaks
-function renderMd(text: string, invert = false) {
+function renderMd(text: string | undefined | null, invert = false) {
+  if (!text) return null;
   const baseText = invert ? 'text-current' : 'text-slate-700';
   const lines = text.split('\n').filter(l => l.trim());
 
