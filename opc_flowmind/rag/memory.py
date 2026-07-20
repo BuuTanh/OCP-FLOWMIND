@@ -139,6 +139,79 @@ def store_rule_knowledge(rules: list[dict], source: str = "OPC_RulesRAG"):
             print(f"[RAG] store_rule_knowledge error: {e}")
 
 
+def store_decision_history(decisions: list[dict]) -> int:
+    """
+    Nạp lịch sử quyết định của nhà quản trị vào RAG khi khởi động.
+    Mỗi quyết định được format thành văn bản giàu ngữ nghĩa để DPA tham khảo
+    khi viết narrative — không ảnh hưởng tới logic tính toán recommendation.
+    """
+    col = _get_collection()
+    if col is None:
+        return 0
+
+    existing_ids = set(col.get()["ids"]) if col.count() > 0 else set()
+    docs, ids, metas = [], [], []
+
+    for d in decisions:
+        did = d.get("decision_id", "")
+        doc_id = f"history_{did}"
+        if doc_id in existing_ids:
+            continue
+
+        text = (
+            f"Tiền lệ {did} | Loại hợp đồng: {d.get('contract_type', '')} | "
+            f"Đối tượng: {d.get('customer_segment', '')} | "
+            f"Tài chính: {d.get('financial_profile', '')} | "
+            f"Rủi ro: {d.get('risk_profile', '')} | "
+            f"Khuyến nghị: {d.get('recommendation', '')} (confidence {d.get('confidence', '')}) | "
+            f"Ghi chú quản trị: {d.get('manager_notes', '')} | "
+            f"Kết quả thực tế: {d.get('outcome', '')}"
+        )
+        docs.append(text)
+        ids.append(doc_id)
+        metas.append({
+            "source": "DECISION_HISTORY",
+            "decision_id": did,
+            "recommendation": d.get("recommendation", ""),
+            "confidence": str(d.get("confidence", "")),
+        })
+
+    if docs:
+        try:
+            col.add(documents=docs, ids=ids, metadatas=metas)
+            print(f"[RAG] Stored {len(docs)} historical decisions")
+            return len(docs)
+        except Exception as e:
+            print(f"[RAG] store_decision_history error: {e}")
+    return 0
+
+
+def seed_startup() -> dict:
+    """
+    Gọi 1 lần khi khởi động API để nạp:
+      1. Risk rules từ Google Sheets (13_RISK_RULES)
+      2. Lịch sử quyết định nhà quản trị (hardcoded seeds)
+    Idempotent — bỏ qua các entry đã tồn tại trong collection.
+    """
+    result = {"rules_loaded": 0, "decisions_loaded": 0, "error": None}
+    try:
+        from data.gsheet_loader import get_risk_rules
+        from rag.seeds import DECISION_HISTORY
+
+        rules = get_risk_rules()
+        if rules:
+            store_rule_knowledge(rules, source="OPC_RulesRAG")
+            result["rules_loaded"] = len(rules)
+
+        result["decisions_loaded"] = store_decision_history(DECISION_HISTORY)
+        print(f"[RAG] Startup seed complete — {result['rules_loaded']} rules, "
+              f"{result['decisions_loaded']} decisions loaded")
+    except Exception as e:
+        result["error"] = str(e)
+        print(f"[RAG] seed_startup error: {e}")
+    return result
+
+
 def get_memory_stats() -> dict:
     col = _get_collection()
     if col is None:

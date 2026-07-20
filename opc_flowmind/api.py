@@ -3,7 +3,7 @@ FastAPI server — n8n gọi vào đây qua HTTP Request nodes.
 Chạy: uvicorn api:app --reload --port 8000
 """
 
-import sys, os, uuid, re
+import sys, os, uuid, re, threading
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -62,6 +62,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# RAG seed chạy nền khi khởi động — không block HTTP response đầu tiên
+threading.Thread(target=rag_memory.seed_startup, daemon=True).start()
 
 # ── Request schemas ──────────────────────────────────────────────────────
 
@@ -527,6 +530,14 @@ def get_alerts():
 def memory_stats():
     """RAG memory stats — bao nhiêu phân tích đã được học."""
     return rag_memory.get_memory_stats()
+
+
+@app.post("/rag/reseed")
+def rag_reseed():
+    """Re-seed RAG với risk rules + lịch sử quyết định (dùng khi Railway restart xóa in-memory)."""
+    result = rag_memory.seed_startup()
+    stats = rag_memory.get_memory_stats()
+    return {"seed_result": result, "total_in_memory": stats.get("count", 0)}
 
 
 @app.post("/memory/invalidate")
