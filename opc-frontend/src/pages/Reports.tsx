@@ -227,8 +227,8 @@ export function Reports() {
                       <th className="text-left px-5 py-3">Tháng</th>
                       <th className="text-right px-5 py-3">Thu dự kiến</th>
                       <th className="text-right px-5 py-3">Chi dự kiến</th>
-                      <th className="text-right px-5 py-3">Net Flow</th>
-                      <th className="text-right px-5 py-3">Closing Cash</th>
+                      <th className="text-right px-5 py-3">Dòng tiền thuần</th>
+                      <th className="text-right px-5 py-3">Tiền cuối kỳ</th>
                       <th className="text-center px-5 py-3">Trạng thái</th>
                     </tr>
                   </thead>
@@ -249,8 +249,8 @@ export function Reports() {
                   </tbody>
                 </table>
                 <div className="px-5 py-3 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-4 print:border-t-2 print:border-slate-800 print:pt-3">
-                  <span>Công nợ mở (AR): <b className="text-slate-700">{formatVnd(receivables?.open_vnd ?? 0)}</b></span>
-                  <span>Pipeline chưa xuất HĐ: <b className="text-slate-700">{formatVnd(receivables?.pipeline_vnd ?? 0)}</b></span>
+                  <span>Công nợ phải thu chưa thanh toán: <b className="text-slate-700">{formatVnd(receivables?.open_vnd ?? 0)}</b></span>
+                  <span>Giá trị dự kiến chưa xuất hóa đơn: <b className="text-slate-700">{formatVnd(receivables?.pipeline_vnd ?? 0)}</b></span>
                 </div>
               </div>
             )

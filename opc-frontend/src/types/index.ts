@@ -82,6 +82,7 @@ export interface AnalysisResult {
     feedback_loop_triggered: boolean;
   };
   zone_decision: DecisionCard;
+  zone_research?: ResearchResult;
   agent_logs: unknown[];
 }
 
@@ -125,4 +126,54 @@ export interface Notification {
   message: string;
   timestamp: string;
   read: boolean;
+}
+
+export type Sentiment = 'TÍCH CỰC' | 'TRUNG LẬP' | 'TIÊU CỰC' | 'CHƯA ĐỦ DỮ LIỆU';
+
+export interface ResearchSource {
+  title: string;
+  publisher: string;
+  published_at: string;
+  url: string;
+  snippet: string;
+  tone: 'tích cực' | 'trung lập' | 'tiêu cực';
+}
+
+export interface ResearchReport {
+  agent: string;
+  scope: 'company' | 'market';
+  subject: string;
+  sentiment: Sentiment;
+  sentiment_score: number;
+  confidence: number;
+  executive_summary: string;
+  positive_signals: string[];
+  negative_signals: string[];
+  recommended_actions: string[];
+  sources: ResearchSource[];
+  generated_at: string;
+  report_id: string;
+  is_demo: boolean;
+  disclaimer: string;
+  identity_status?: string;
+  source_status?: string;
+}
+
+export interface ResearchResult {
+  company_report: ResearchReport;
+  market_report: ResearchReport;
+  overall: {
+    sentiment: Sentiment;
+    sentiment_score: number;
+    decision_support: string;
+    human_review_required: boolean;
+    recommendation_before_research?: Recommendation;
+    recommendation_after_research?: Recommendation;
+    confidence_before_research?: number;
+    confidence_after_research?: number;
+    confidence_adjustment?: number;
+    impact_summary?: string;
+  };
+  methodology: string;
+  is_demo: boolean;
 }

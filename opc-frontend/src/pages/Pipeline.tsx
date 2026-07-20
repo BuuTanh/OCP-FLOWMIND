@@ -342,11 +342,11 @@ function ConfirmSignModal({ contractId, decision, resolvedCount, totalChecklist,
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="bg-slate-50 rounded-xl p-3">
               <div className="text-lg font-bold text-slate-800">{(decision.confidence_score * 100).toFixed(0)}%</div>
-              <div className="text-xs text-slate-500 mt-0.5">Confidence</div>
+              <div className="text-xs text-slate-500 mt-0.5">Độ tin cậy</div>
             </div>
             <div className="bg-slate-50 rounded-xl p-3">
               <div className="text-lg font-bold text-slate-800">{resolvedCount}/{totalChecklist}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Checklist hoàn thành</div>
+              <div className="text-xs text-slate-500 mt-0.5">Điều kiện đã hoàn thành</div>
             </div>
             <div className="bg-slate-50 rounded-xl p-3">
               <div className="text-lg font-bold text-green-700">{decision.bank_options?.length ?? 0}</div>
@@ -648,14 +648,14 @@ function InputDataZone({ zoneInput }: { zoneInput: AnalysisResult['zone_input'] 
             <span className="p-2 rounded-lg bg-white shrink-0 text-red-500"><TrendingDown size={16} /></span>
             <div className="min-w-0">
               <div className="text-lg font-bold text-slate-800 leading-tight">{formatM(zoneInput.receivables?.open_vnd || 0)}</div>
-              <div className="text-xs text-slate-500 truncate">Công nợ mở (Open AR)</div>
+              <div className="text-xs text-slate-500 truncate">Công nợ phải thu chưa thanh toán</div>
             </div>
           </div>
           <div className="bg-slate-50 rounded-xl p-3.5 flex items-center gap-3">
             <span className="p-2 rounded-lg bg-white shrink-0 text-amber-500"><TrendingUp size={16} /></span>
             <div className="min-w-0">
               <div className="text-lg font-bold text-slate-800 leading-tight">{formatM(zoneInput.receivables?.pipeline_vnd || 0)}</div>
-              <div className="text-xs text-slate-500 truncate">Pipeline chưa xuất HĐ</div>
+              <div className="text-xs text-slate-500 truncate">Giá trị dự kiến chưa xuất hóa đơn</div>
             </div>
           </div>
         </div>
@@ -881,7 +881,7 @@ export function Pipeline() {
       addNotification({
         type: 'info',
         title: `Đã thêm hợp đồng ${cid} từ PDF`,
-        message: `Khuyến nghị: ${data.zone_decision.recommendation} — Confidence ${(data.zone_decision.confidence_score * 100).toFixed(0)}%`,
+        message: `Khuyến nghị: ${data.zone_decision.recommendation} — Độ tin cậy ${(data.zone_decision.confidence_score * 100).toFixed(0)}%`,
       });
       resetPdfForm();
       setInputMode('existing');
@@ -1008,7 +1008,7 @@ export function Pipeline() {
       addNotification({
         type: 'info',
         title: `Phân tích ${selectedContract} hoàn tất`,
-        message: `Kết quả: ${data.zone_decision.recommendation}. Confidence: ${(data.zone_decision.confidence_score * 100).toFixed(0)}%`,
+        message: `Kết quả: ${data.zone_decision.recommendation}. Độ tin cậy: ${(data.zone_decision.confidence_score * 100).toFixed(0)}%`,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Lỗi kết nối backend';
@@ -1142,7 +1142,7 @@ export function Pipeline() {
 
             {result?.zone_workflow.crisis_layer.active && rec !== 'CHUA_DU_DU_LIEU' && rec !== 'KHONG_KY' && (
               <div className="flex items-center gap-2 pb-1">
-                <label className="text-xs font-semibold text-slate-600">Crisis resolved</label>
+                <label className="text-xs font-semibold text-slate-600">Đã xử lý giao dịch nghi vấn</label>
                 <button
                   onClick={() => setCrisisResolved(!crisisResolved)}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${crisisResolved ? 'bg-green-500' : 'bg-slate-300'}`}
@@ -1375,8 +1375,8 @@ export function Pipeline() {
                     <tr className="bg-slate-50 text-slate-500 font-semibold">
                       <th className="text-left px-4 py-2.5">Thời gian</th>
                       <th className="text-left px-4 py-2.5">Kết quả</th>
-                      <th className="text-right px-4 py-2.5">Confidence</th>
-                      <th className="text-right px-4 py-2.5">Alerts</th>
+                      <th className="text-right px-4 py-2.5">Độ tin cậy</th>
+                      <th className="text-right px-4 py-2.5">Cảnh báo</th>
                       <th className="text-right px-4 py-2.5">Đã xử lý</th>
                     </tr>
                   </thead>
@@ -1438,8 +1438,8 @@ export function Pipeline() {
           <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50/60 to-transparent">
             <ZoneHeader
               number="02"
-              title="Luồng Agent"
-              subtitle="Agent Workflow · Data & Finance → Risk & Compliance → Decision & Partner"
+              title="Quy trình phân tích"
+              subtitle="Tài chính → Rủi ro và tuân thủ → Thông tin phi tài chính → Tham mưu quyết định"
               icon={GitBranch}
               accent="bg-indigo-600"
             />
@@ -1455,10 +1455,10 @@ export function Pipeline() {
                   : <CheckCircle size={16} className="text-slate-400" />}
                 Crisis Layer
                 {result.zone_workflow.crisis_layer.active && !crisisResolved && (
-                  <span className="ml-2 text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full font-medium">ACTIVE</span>
+                  <span className="ml-2 text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full font-medium">ĐANG CẢNH BÁO</span>
                 )}
                 {crisisResolved && (
-                  <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">RESOLVED</span>
+                  <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">ĐÃ XỬ LÝ</span>
                 )}
               </div>
               <p className="text-xs text-slate-600">
@@ -1483,7 +1483,8 @@ export function Pipeline() {
                   expanded={expandedSteps.has(i)}
                   onToggle={() => setExpandedSteps(prev => {
                     const next = new Set(prev);
-                    next.has(i) ? next.delete(i) : next.add(i);
+                    if (next.has(i)) next.delete(i);
+                    else next.add(i);
                     return next;
                   })}
                 />
@@ -1500,7 +1501,7 @@ export function Pipeline() {
             <ZoneHeader
               number="03"
               title="Bảng quyết định"
-              subtitle="Decision Dashboard · Decision & Partner Agent"
+              subtitle="Bảng tham mưu quyết định · Chuyên viên tham mưu"
               icon={Target}
               accent="bg-emerald-600"
             />
@@ -1511,7 +1512,7 @@ export function Pipeline() {
             <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
               <div className="text-2xl font-extrabold tracking-tight">{REC_LABELS[rec] ?? rec}</div>
               <div className={`text-lg font-bold px-4 py-1 rounded-full border-2 ${REC_COLORS[rec]}`}>
-                Confidence: {(decision.confidence_score * 100).toFixed(0)}%
+                Độ tin cậy: {(decision.confidence_score * 100).toFixed(0)}%
               </div>
             </div>
             {decision.narrative && (
@@ -1520,6 +1521,78 @@ export function Pipeline() {
               </div>
             )}
           </div>
+
+          {result.zone_research?.overall && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Thông tin phi tài chính đưa vào quyết định</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{result.zone_research.overall.decision_support}</div>
+                </div>
+                <span className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">
+                  {result.zone_research.overall.sentiment} · Điểm {result.zone_research.overall.sentiment_score}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border border-blue-100 bg-white/80 p-3">
+                  <div className="text-xs font-semibold text-slate-500">DOANH NGHIỆP</div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-sm">
+                    <span className="font-medium text-slate-800">{result.zone_research.company_report?.subject ?? 'Chưa xác định'}</span>
+                    <span className="font-semibold text-blue-700">{result.zone_research.company_report?.sentiment ?? 'Chưa đủ dữ liệu'}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{result.zone_research.company_report?.executive_summary}</p>
+                  {result.zone_research.company_report?.identity_status && <p className="mt-1 text-xs font-medium text-amber-700">Định danh: {result.zone_research.company_report.identity_status}</p>}
+                </div>
+                <div className="rounded-lg border border-blue-100 bg-white/80 p-3">
+                  <div className="text-xs font-semibold text-slate-500">THỊ TRƯỜNG</div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-sm">
+                    <span className="font-medium text-slate-800">{result.zone_research.market_report?.subject ?? 'Chưa xác định'}</span>
+                    <span className="font-semibold text-blue-700">{result.zone_research.market_report?.sentiment ?? 'Chưa đủ dữ liệu'}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{result.zone_research.market_report?.executive_summary}</p>
+                  <p className="mt-1 text-xs text-slate-500">Đã đối chiếu {result.zone_research.market_report?.sources?.length ?? 0} nguồn công khai.</p>
+                </div>
+              </div>
+
+              {[
+                ...(result.zone_research.company_report?.negative_signals ?? []),
+                ...(result.zone_research.market_report?.negative_signals ?? []),
+                ...(result.zone_research.company_report?.positive_signals ?? []),
+                ...(result.zone_research.market_report?.positive_signals ?? []),
+              ].slice(0, 3).length > 0 && (
+                <div className="mt-3">
+                  <div className="text-xs font-semibold text-slate-600">Tín hiệu đáng lưu ý</div>
+                  <ul className="mt-1 space-y-1 text-xs text-slate-700">
+                    {[
+                      ...(result.zone_research.company_report?.negative_signals ?? []),
+                      ...(result.zone_research.market_report?.negative_signals ?? []),
+                      ...(result.zone_research.company_report?.positive_signals ?? []),
+                      ...(result.zone_research.market_report?.positive_signals ?? []),
+                    ].slice(0, 3).map((signal, index) => <li key={`${signal}-${index}`}>• {signal}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-3 rounded-lg bg-blue-100/70 px-3 py-2 text-xs text-blue-900">
+                <strong>Ảnh hưởng đến khuyến nghị:</strong> {result.zone_research.overall.impact_summary ?? 'Kết quả được sử dụng để hiệu chỉnh độ tin cậy và điều kiện phê duyệt.'}
+                {typeof result.zone_research.overall.confidence_adjustment === 'number' && result.zone_research.overall.confidence_adjustment !== 0 && (
+                  <span> Độ tin cậy điều chỉnh {(result.zone_research.overall.confidence_adjustment * 100).toFixed(0)} điểm phần trăm.</span>
+                )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                {[
+                  ...(result.zone_research.company_report?.sources ?? []),
+                  ...(result.zone_research.market_report?.sources ?? []),
+                ].slice(0, 3).map((source, index) => (
+                  <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">
+                    Nguồn {index + 1}: {source.publisher}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Điều kiện bảo vệ — 1 điều kiện duy nhất, nổi bật, đi kèm phương án + 3 lý do */}
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-start gap-3">
@@ -1609,7 +1682,7 @@ export function Pipeline() {
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <FileCheck size={15} className="text-brand-600" />
-                <h3 className="text-sm font-semibold text-slate-800">Checklist phê duyệt</h3>
+                <h3 className="text-sm font-semibold text-slate-800">Danh mục điều kiện phê duyệt</h3>
                 <span className="ml-auto text-xs text-slate-400">
                   {resolvedIds.size}/{checklistParsed.length} đã xử lý
                 </span>

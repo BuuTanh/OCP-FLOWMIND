@@ -1,5 +1,5 @@
 def build_final_output(crisis_result, financial_proposal, risk_assessment,
-                       decision_card, agent_logs, trace_id: str = "") -> dict:
+                       decision_card, agent_logs, trace_id: str = "", research_result=None) -> dict:
     return {
         "meta": {
             "contract_id": financial_proposal.target_contract_id,
@@ -33,29 +33,37 @@ def build_final_output(crisis_result, financial_proposal, risk_assessment,
             },
             "pipeline": [
                 {
-                    "step": 1, "agent": "Data & Finance Agent", "status": "completed",
+                    "step": 1, "agent": "Chuyên viên dữ liệu và tài chính", "status": "Hoàn tất",
                     "summary": (
-                        f"Margin: {financial_proposal.gross_margin_actual:.0%} | "
-                        f"Funding gap 3M: {financial_proposal.total_funding_gap_3m/1e6:,.0f}M VND\n\n"
+                        f"Biên lợi nhuận gộp: {financial_proposal.gross_margin_actual:.0%} | "
+                        f"Thiếu hụt vốn 3 tháng: {financial_proposal.total_funding_gap_3m/1e6:,.0f} triệu đồng\n\n"
                         + (financial_proposal.narrative or "")
                     ),
                     "has_warning": not financial_proposal.gross_margin_ok
                 },
                 {
-                    "step": 2, "agent": "Risk & Compliance Agent",
-                    "status": "completed",
+                    "step": 2, "agent": "Chuyên viên rủi ro và tuân thủ",
+                    "status": "Hoàn tất",
                     "summary": (
-                        f"Risk level: {risk_assessment.overall_risk_level} | {len(risk_assessment.alerts)} alerts\n"
-                        + (f"Blocked by: {risk_assessment.blocked_by}\n" if risk_assessment.blocked_by else "")
+                        f"Mức rủi ro: {risk_assessment.overall_risk_level} | {len(risk_assessment.alerts)} cảnh báo\n"
+                        + (f"Điều kiện đang cản trở: {risk_assessment.blocked_by}\n" if risk_assessment.blocked_by else "")
                         + "\n" + (risk_assessment.narrative or "")
                     ),
                     "has_warning": risk_assessment.overall_risk_level in ("Critical", "High"),
                     "critical_alerts": risk_assessment.blocked_by if not risk_assessment.pipeline_should_continue else None
                 },
                 {
-                    "step": 3, "agent": "Decision & Partner Agent", "status": "completed",
+                    "step": 3, "agent": "Chuyên viên nghiên cứu doanh nghiệp và thị trường", "status": "Hoàn tất",
                     "summary": (
-                        f"Recommendation: {decision_card.recommendation} | Confidence: {decision_card.confidence_score:.0%}\n\n"
+                        f"Đánh giá thông tin phi tài chính: {(research_result or {}).get('overall', {}).get('sentiment', 'CHƯA ĐỦ DỮ LIỆU')}\n"
+                        f"Khuyến nghị: {(research_result or {}).get('overall', {}).get('decision_support', 'Cần thẩm định bổ sung')}"
+                    ),
+                    "has_warning": (research_result or {}).get("overall", {}).get("sentiment") != "TÍCH CỰC"
+                },
+                {
+                    "step": 4, "agent": "Chuyên viên tham mưu quyết định", "status": "Hoàn tất",
+                    "summary": (
+                        f"Khuyến nghị: {decision_card.recommendation} | Độ tin cậy: {decision_card.confidence_score:.0%}\n\n"
                         + (decision_card.narrative or "")
                     ),
                     "has_warning": decision_card.confidence_score < 0.65
@@ -63,6 +71,7 @@ def build_final_output(crisis_result, financial_proposal, risk_assessment,
             ],
             "feedback_loop_triggered": not risk_assessment.pipeline_should_continue
         },
+        "zone_research": research_result,
         "zone_decision": {
             "recommendation": decision_card.recommendation,
             "confidence_score": decision_card.confidence_score,

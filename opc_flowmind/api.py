@@ -40,6 +40,7 @@ from agents.dfa import DataFinanceAgent
 from agents.rca import RiskComplianceAgent
 from agents.dpa import DecisionPartnerAgent
 from agents.extraction_agent import extract_contract_fields
+from agents.research_agent import run_research
 from models.financial import FinancialProposal
 from models.risk import RiskAssessment
 from output.schema import build_final_output
@@ -89,6 +90,11 @@ class BuildOutputRequest(BaseModel):
 class PipelineRequest(BaseModel):
     contract_id: str = TARGET_CONTRACT_ID
     founder_crisis_resolved: bool = False
+
+class ResearchRequest(BaseModel):
+    company_name: str
+    industry: str
+    province: str = ""
 
 # ── Endpoints ────────────────────────────────────────────────────────────
 
@@ -224,6 +230,16 @@ def api_run_pipeline(req: PipelineRequest):
         founder_crisis_resolved=req.founder_crisis_resolved
     )
     return result
+
+
+@app.post("/api/research")
+def api_research(req: ResearchRequest):
+    """Run the two deterministic demo research agents in one request."""
+    company_name = req.company_name.strip()
+    industry = req.industry.strip()
+    if not company_name or not industry:
+        raise HTTPException(status_code=422, detail="company_name and industry are required")
+    return run_research(company_name=company_name, industry=industry, province=req.province.strip())
 
 
 # ── React Frontend Endpoints ─────────────────────────────────────────────

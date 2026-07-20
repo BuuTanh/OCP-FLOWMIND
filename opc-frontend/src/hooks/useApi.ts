@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AnalysisResult, Contract, CashflowMonth, RiskAlert, Customer, ExtractedContract, ConfirmContractPayload } from '../types';
+import type { AnalysisResult, Contract, CashflowMonth, RiskAlert, Customer, ExtractedContract, ConfirmContractPayload, ResearchResult } from '../types';
 
 // API_BASE is injected at build time by Vite from VITE_API_URL env var
 const API_BASE: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
@@ -79,9 +79,14 @@ export function useApi() {
     return data;
   }
 
+  async function runResearch(companyName: string, industry: string, province = ''): Promise<ResearchResult> {
+    const { data } = await client.post('/api/research', { company_name: companyName, industry, province });
+    return data;
+  }
+
   return {
     runAnalysis, getContracts, getCashflow, getAlerts, getReceivables,
     getSheetId, getApiKey, reloadCache, getCustomers, extractContract, confirmContract,
-    nextContractId, nextCustomerId,
+    nextContractId, nextCustomerId, runResearch,
   };
 }

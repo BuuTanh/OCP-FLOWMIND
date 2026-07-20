@@ -295,7 +295,7 @@ export function Settings() {
       </Section>
 
       {/* RAG Memory */}
-      <Section title="Agentic RAG Memory">
+      <Section title="Kho tri thức phục vụ phân tích">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3 flex-1">
             <Brain size={20} className="text-brand-600 shrink-0" />
@@ -311,7 +311,7 @@ export function Settings() {
           {memoryStats?.enabled && (
             <div className="text-right">
               <div className="text-2xl font-bold text-brand-700">{memoryStats.count}</div>
-              <div className="text-xs text-slate-400">knowledge entries</div>
+      <div className="text-xs text-slate-400">mục tri thức</div>
             </div>
           )}
         </div>
@@ -339,14 +339,14 @@ export function Settings() {
             className="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-50"
           >
             <RefreshCw size={13} className={clearing ? 'animate-spin' : ''} />
-            {clearing ? 'Đang reload…' : 'Reload cache'}
+            {clearing ? 'Đang nạp lại…' : 'Nạp lại dữ liệu đệm'}
           </button>
         </div>
       </Section>
 
       {/* Reset for testing */}
       <Section title="Reset để test">
-        <p className="text-xs text-slate-500">Xóa lịch sử quyết định Founder + danh sách đã phân tích trên Railway. RAG memory giữ nguyên.</p>
+        <p className="text-xs text-slate-500">Xóa lịch sử quyết định của người phê duyệt và danh sách đã phân tích. Kho tri thức vẫn được giữ nguyên.</p>
         <button
           onClick={resetMemory}
           disabled={resetting}

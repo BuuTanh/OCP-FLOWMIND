@@ -8,6 +8,7 @@ import { Financial } from './pages/Financial';
 import { Risks } from './pages/Risks';
 import { Settings } from './pages/Settings';
 import { Guide } from './pages/Guide';
+import { Research } from './pages/Research';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/financial" element={<Financial />} />
             <Route path="/risks" element={<Risks />} />
+            <Route path="/research" element={<Research />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </Layout>

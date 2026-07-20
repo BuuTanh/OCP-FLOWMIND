@@ -132,9 +132,9 @@ export function Financial() {
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs text-slate-500">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-400 inline-block" />OK (≥550M)</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-400 inline-block" />Warning</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-400 inline-block" />Critical (&lt;0)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-400 inline-block" />Đạt (≥550 triệu)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-400 inline-block" />Cần lưu ý</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-400 inline-block" />Nghiêm trọng (&lt;0)</span>
               <button onClick={loadCashflow} className="flex items-center gap-1 text-brand-600 hover:text-brand-800 ml-2">
                 <RefreshCw size={12} />Reload
               </button>
@@ -171,9 +171,9 @@ export function Financial() {
                 <th className="text-left px-5 py-3">Tháng</th>
                 <th className="text-right px-5 py-3">Dự kiến thu</th>
                 <th className="text-right px-5 py-3">Dự kiến chi</th>
-                <th className="text-right px-5 py-3">Net Flow</th>
-                <th className="text-right px-5 py-3">Closing Cash</th>
-                <th className="text-right px-5 py-3">vs 550M min</th>
+                <th className="text-right px-5 py-3">Dòng tiền thuần</th>
+                <th className="text-right px-5 py-3">Tiền cuối kỳ</th>
+                <th className="text-right px-5 py-3">So với mức tối thiểu 550 triệu</th>
                 <th className="text-center px-5 py-3">Trạng thái</th>
               </tr>
             </thead>

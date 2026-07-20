@@ -112,7 +112,7 @@ export function Dashboard() {
             <div className="font-semibold text-red-700 text-sm">⚠ Crisis Layer: Giao dịch đáng ngờ phát hiện</div>
             <div className="text-red-600 text-xs mt-0.5">
               {lastResult?.zone_workflow.crisis_layer.alert
-                ? 'Có giao dịch rủi ro cao cần Founder xác nhận trước khi phân tích tiếp.'
+                ? 'Có giao dịch rủi ro cao cần người có thẩm quyền xác nhận trước khi phân tích tiếp.'
                 : 'Cần kiểm tra trạng thái giao dịch ngân hàng.'}
             </div>
           </div>
@@ -158,7 +158,7 @@ export function Dashboard() {
         <KpiCard
           label="Cảnh báo rủi ro"
           value={allAlerts.length > 0 ? (criticalCount > 0 ? criticalCount : allAlerts.length) : '—'}
-          sub={allAlerts.length > 0 ? (criticalCount > 0 ? `${criticalCount} Critical` : `${allAlerts.length} alerts`) : 'Chưa phân tích'}
+          sub={allAlerts.length > 0 ? (criticalCount > 0 ? `${criticalCount} nghiêm trọng` : `${allAlerts.length} cảnh báo`) : 'Chưa phân tích'}
           icon={AlertCircle}
           iconColor={criticalCount > 0 ? 'text-red-500' : 'text-slate-400'}
           trend={criticalCount > 0 ? 'down' : undefined}
@@ -244,11 +244,11 @@ export function Dashboard() {
               </ResponsiveContainer>
               <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100 text-xs">
                 <div>
-                  <div className="text-slate-400">Công nợ mở (AR)</div>
+                  <div className="text-slate-400">Công nợ phải thu chưa thanh toán</div>
                   <div className="font-semibold text-slate-700">{formatM(openAR)}</div>
                 </div>
                 <div>
-                  <div className="text-slate-400">Margin TB danh mục</div>
+                  <div className="text-slate-400">Biên lợi nhuận bình quân danh mục</div>
                   <div className={`font-semibold ${avgMargin >= 0.28 ? 'text-green-600' : 'text-amber-600'}`}>{(avgMargin * 100).toFixed(1)}%</div>
                 </div>
               </div>

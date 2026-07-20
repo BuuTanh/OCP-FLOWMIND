@@ -2,16 +2,17 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileBarChart, GitBranch, BarChart2,
-  ShieldAlert, Settings, Bell, BookOpen
+  ShieldAlert, Settings, Bell, BookOpen, SearchCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NotificationPanel } from './NotificationPanel';
 
 const NAV_ITEMS = [
   { to: '/guide', label: 'Hướng dẫn', icon: BookOpen },
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { to: '/', label: 'Tổng quan điều hành', icon: LayoutDashboard, exact: true },
   { to: '/reports', label: 'Báo cáo', icon: FileBarChart },
-  { to: '/pipeline', label: 'Phân tích AI', icon: GitBranch },
+  { to: '/pipeline', label: 'Thẩm định hợp đồng', icon: GitBranch },
+  { to: '/research', label: 'Thông tin phi tài chính', icon: SearchCheck },
   { to: '/financial', label: 'Tài chính', icon: BarChart2 },
   { to: '/risks', label: 'Rủi ro', icon: ShieldAlert, badge: true },
   { to: '/settings', label: 'Cài đặt', icon: Settings },
@@ -19,9 +20,10 @@ const NAV_ITEMS = [
 
 const PAGE_TITLES: Record<string, string> = {
   '/guide': 'Hướng dẫn sử dụng & Kiến thức hệ thống',
-  '/': 'Dashboard',
+  '/': 'Tổng quan điều hành',
   '/reports': 'Báo cáo',
-  '/pipeline': 'Phân tích AI',
+  '/pipeline': 'Thẩm định và khuyến nghị hợp đồng',
+  '/research': 'Thẩm định thông tin phi tài chính',
   '/financial': 'Tài chính',
   '/risks': 'Rủi ro & Cảnh báo',
   '/settings': 'Cài đặt',
@@ -43,7 +45,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Logo */}
         <div className="px-5 py-5 border-b border-white/10">
           <div className="text-white font-bold text-base leading-tight">OPC FlowMind</div>
-          <div className="text-blue-200 text-xs mt-0.5 font-medium">Agentic AI Decision Hub</div>
+          <div className="text-blue-200 text-xs mt-0.5 font-medium">Trung tâm tham mưu quyết định</div>
         </div>
 
         {/* Nav */}

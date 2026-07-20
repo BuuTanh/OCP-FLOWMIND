@@ -16,6 +16,13 @@ const colorMap: Record<Severity, string> = {
 };
 
 const labelMap: Partial<Record<Severity, string>> = {
+  Critical: 'Nghiêm trọng',
+  High: 'Cao',
+  Medium: 'Trung bình',
+  Low: 'Thấp',
+  ok: 'Đạt',
+  warning: 'Cần lưu ý',
+  info: 'Thông tin',
   KY: 'KÝ',
   KY_CO_DIEU_KIEN: 'KÝ CÓ ĐK',
   KHONG_KY: 'KHÔNG KÝ',
