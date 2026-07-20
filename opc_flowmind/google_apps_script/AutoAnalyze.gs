@@ -14,6 +14,7 @@
 
 const RAILWAY_URL      = 'https://ocp-flowmind-production.up.railway.app';
 const CONTRACTS_SHEET  = '04_CONTRACTS';
+const CUSTOMERS_SHEET  = '03_CUSTOMERS';
 const RESULTS_SHEET    = 'AI_RESULTS';
 const NOTIFY_EMAIL_FALLBACK = 'tanhtlb23411@st.uel.edu.vn'; // dùng nếu chưa lưu email nào
 // DECISION_SECRET không hardcode ở đây (repo public) — set qua:
@@ -123,10 +124,11 @@ function onSheetEdit(e) {
       continue;
     }
 
-    // Dùng lock để tránh onEdit + runScheduled gửi email trùng nhau
+    // Dùng lock để tránh onEdit + runScheduled gửi email trùng nhau.
+    // Chờ dài (2 phút) vì runAnalysis() gọi Railway phân tích thật, có thể mất 40-90s+.
     const lock = LockService.getScriptLock();
     try {
-      lock.waitLock(10000);
+      lock.waitLock(120000);
       // Kiểm tra lại sau khi có lock (có thể thread khác đã xử lý)
       if (alreadyAnalyzed(contractId)) {
         Logger.log('⏭ ' + contractId + ' đã được xử lý bởi thread khác.');
@@ -622,6 +624,114 @@ function doGet(e) {
   ).setMimeType(ContentService.MimeType.JSON);
 }
 
+/**
+ * doPost — dùng cho Agent trích xuất hợp đồng từ PDF (Railway gọi bằng JSON body,
+ * không dùng query string như doGet vì dữ liệu có thể dài).
+ * Actions: "append_contract" (ghi hợp đồng mới vào Sheets),
+ *          "append_customer" (ghi khách hàng mới vào Sheets, nếu PDF thuộc khách hàng chưa có),
+ *          "send_analysis_email" (gửi email với kết quả phân tích đã có sẵn,
+ *           KHÔNG tự phân tích lại — tránh chạy pipeline 2 lần cho cùng 1 hợp đồng).
+ */
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents);
+    const action = body.action || '';
+
+    if (action === 'append_contract') {
+      return _handleAppendContract(body.fields || {});
+    }
+    if (action === 'append_customer') {
+      return _handleAppendCustomer(body.fields || {});
+    }
+    if (action === 'send_analysis_email') {
+      return _handleSendAnalysisEmail(body.contract_id, body.result);
+    }
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: 'action không hợp lệ: ' + action })
+    ).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: err.toString() })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/** Ghi 1 dòng khách hàng mới vào 03_CUSTOMERS — theo đúng thứ tự cột hiện có trong sheet.
+ * Chỉ điền customer_id + customer_name, các cột khác (industry, province...) để trống,
+ * founder có thể tự bổ sung sau trên Sheets nếu cần. */
+function _handleAppendCustomer(fields) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CUSTOMERS_SHEET);
+  if (!sheet) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: 'Không tìm thấy sheet ' + CUSTOMERS_SHEET })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+  if (!fields.customer_id) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: 'Thiếu customer_id' })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+                      .map(h => String(h).trim().toLowerCase());
+  const row = header.map(col => (fields[col] !== undefined && fields[col] !== null) ? fields[col] : '');
+  sheet.appendRow(row);
+
+  return ContentService.createTextOutput(
+    JSON.stringify({ status: 'ok', customer_id: fields.customer_id })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Ghi 1 dòng hợp đồng mới vào 04_CONTRACTS — theo đúng thứ tự cột hiện có trong sheet,
+ * không hardcode vị trí cột để tránh lệch nếu thứ tự cột thay đổi sau này. */
+function _handleAppendContract(fields) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CONTRACTS_SHEET);
+  if (!sheet) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: 'Không tìm thấy sheet ' + CONTRACTS_SHEET })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+  if (!fields.contract_id) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: 'Thiếu contract_id' })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+                      .map(h => String(h).trim().toLowerCase());
+  const row = header.map(col => (fields[col] !== undefined && fields[col] !== null) ? fields[col] : '');
+  sheet.appendRow(row);
+
+  // Đánh dấu đã phân tích ngay — vì Railway sẽ tự chạy phân tích ở bước kế tiếp
+  // (không dựa vào onSheetEdit, vì trigger này không tự fire khi sheet bị sửa bằng code).
+  markAnalyzed(fields.contract_id);
+
+  return ContentService.createTextOutput(
+    JSON.stringify({ status: 'ok', contract_id: fields.contract_id })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Gửi email với kết quả phân tích đã có sẵn (Railway đã chạy xong) — tái dùng
+ * đúng sendSingleEmail()/writeResult() hiện có, không phân tích lại lần 2. */
+function _handleSendAnalysisEmail(contractId, result) {
+  try {
+    if (!contractId || !result) {
+      return ContentService.createTextOutput(
+        JSON.stringify({ status: 'error', message: 'Thiếu contract_id hoặc result' })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+    writeResult(contractId, result);
+    sendSingleEmail(contractId, result);
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'ok', contract_id: contractId })
+    ).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: 'error', message: err.toString() })
+    ).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 // Trả về danh sách email nhận thông báo (từ PropertiesService hoặc fallback)
 function _getNotifyEmails() {
   const saved = PropertiesService.getScriptProperties().getProperty('NOTIFY_EMAILS') || '';
@@ -695,11 +805,11 @@ function analyzeAll() {
   Logger.log('✅ Xong: ' + results.length + ' hợp đồng.');
 }
 
-/** Xóa flag analyzed_* để test lại từ đầu — giữ nguyên SCHEDULE_INTERVAL và NOTIFY_EMAILS */
+/** Xóa flag analyzed_* để test lại từ đầu — giữ nguyên SCHEDULE_INTERVAL, NOTIFY_EMAILS, DECISION_SECRET */
 function clearAnalyzedFlags() {
   const props = PropertiesService.getScriptProperties();
   const all   = props.getProperties();
-  const keep  = ['SCHEDULE_INTERVAL', 'NOTIFY_EMAILS'];
+  const keep  = ['SCHEDULE_INTERVAL', 'NOTIFY_EMAILS', 'DECISION_SECRET'];
   Object.keys(all).forEach(k => {
     if (!keep.includes(k)) props.deleteProperty(k);
   });

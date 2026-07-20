@@ -1,10 +1,10 @@
 import axios from 'axios';
-import type { AnalysisResult, Contract, CashflowMonth, RiskAlert } from '../types';
+import type { AnalysisResult, Contract, CashflowMonth, RiskAlert, Customer, ExtractedContract, ConfirmContractPayload } from '../types';
 
 // API_BASE is injected at build time by Vite from VITE_API_URL env var
 const API_BASE: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
-const client = axios.create({ baseURL: API_BASE, timeout: 120000 });
+const client = axios.create({ baseURL: API_BASE, timeout: 180000 });
 
 export function useApi() {
   async function runAnalysis(contractId: string, crisisResolved: boolean, resolvedItems: string[] = [], resolvedCreditItems: string[] = []): Promise<AnalysisResult> {
@@ -50,5 +50,38 @@ export function useApi() {
     await client.post('/memory/invalidate');
   }
 
-  return { runAnalysis, getContracts, getCashflow, getAlerts, getReceivables, getSheetId, getApiKey, reloadCache };
+  async function getCustomers(): Promise<Customer[]> {
+    const { data } = await client.get('/customers');
+    return data;
+  }
+
+  async function nextContractId(): Promise<string> {
+    const { data } = await client.get('/next-contract-id');
+    return data.contract_id;
+  }
+
+  async function nextCustomerId(): Promise<string> {
+    const { data } = await client.get('/next-customer-id');
+    return data.customer_id;
+  }
+
+  async function extractContract(file: File): Promise<ExtractedContract> {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await client.post('/extract-contract', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  }
+
+  async function confirmContract(payload: ConfirmContractPayload): Promise<AnalysisResult> {
+    const { data } = await client.post('/confirm-contract', payload);
+    return data;
+  }
+
+  return {
+    runAnalysis, getContracts, getCashflow, getAlerts, getReceivables,
+    getSheetId, getApiKey, reloadCache, getCustomers, extractContract, confirmContract,
+    nextContractId, nextCustomerId,
+  };
 }

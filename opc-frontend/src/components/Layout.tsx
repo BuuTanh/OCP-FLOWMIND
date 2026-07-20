@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, FileText, GitBranch, BarChart2,
-  ShieldAlert, Settings, Bell
+  LayoutDashboard, FileBarChart, GitBranch, BarChart2,
+  ShieldAlert, Settings, Bell, BookOpen
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NotificationPanel } from './NotificationPanel';
 
 const NAV_ITEMS = [
+  { to: '/guide', label: 'Hướng dẫn', icon: BookOpen },
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { to: '/contracts', label: 'Hợp đồng', icon: FileText },
+  { to: '/reports', label: 'Báo cáo', icon: FileBarChart },
   { to: '/pipeline', label: 'Phân tích AI', icon: GitBranch },
   { to: '/financial', label: 'Tài chính', icon: BarChart2 },
   { to: '/risks', label: 'Rủi ro', icon: ShieldAlert, badge: true },
@@ -17,8 +18,9 @@ const NAV_ITEMS = [
 ];
 
 const PAGE_TITLES: Record<string, string> = {
+  '/guide': 'Hướng dẫn sử dụng & Kiến thức hệ thống',
   '/': 'Dashboard',
-  '/contracts': 'Quản lý Hợp đồng',
+  '/reports': 'Báo cáo',
   '/pipeline': 'Phân tích AI',
   '/financial': 'Tài chính',
   '/risks': 'Rủi ro & Cảnh báo',
@@ -37,7 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-100">
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 flex flex-col h-full" style={{ backgroundColor: '#1e40af' }}>
+      <aside className="no-print w-56 shrink-0 flex flex-col h-full" style={{ backgroundColor: '#1e40af' }}>
         {/* Logo */}
         <div className="px-5 py-5 border-b border-white/10">
           <div className="text-white font-bold text-base leading-tight">OPC FlowMind</div>
@@ -84,7 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-20">
+        <header className="no-print h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-20">
           <h1 className="text-base font-semibold text-slate-800">{title}</h1>
           <div className="flex items-center gap-3">
             <div className="relative">

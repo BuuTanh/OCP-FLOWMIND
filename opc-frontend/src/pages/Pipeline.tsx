@@ -4,11 +4,12 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLin
 import { Play, CheckCircle, AlertTriangle, Loader, ChevronDown, ChevronUp,
          XCircle, Clock, FileCheck, Banknote, X, ArrowRight, User, Target, Database, History,
          PenLine, ThumbsDown, ClipboardList, RotateCcw, GitBranch, Shield, TrendingDown, TrendingUp,
+         UploadCloud, ListChecks, Sparkles, UserCheck, UserPlus, Calculator,
          type LucideIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useApi } from '../hooks/useApi';
 import { StatusBadge } from '../components/StatusBadge';
-import type { AnalysisResult, CashflowMonth } from '../types';
+import type { AnalysisResult, CashflowMonth, ExtractedContract, Customer } from '../types';
 import type { ContractDecision } from '../context/AppContext';
 
 const CONTRACTS_FALLBACK: string[] = [];
@@ -695,7 +696,7 @@ export function Pipeline() {
           setLastResult, setIsRunning, isRunning, analysisHistory, setAnalysisHistory,
           addNotification, runLog, addRunEntry, runResults, addRunResult,
           contractDecisions, saveDecision, clearDecision } = useApp();
-  const { runAnalysis, getContracts } = useApi();
+  const { runAnalysis, getContracts, extractContract, getCustomers, confirmContract, nextContractId, nextCustomerId } = useApi();
   const location = useLocation();
 
   // Fetch contract list động từ backend
@@ -754,6 +755,142 @@ export function Pipeline() {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
+
+  // ── Đầu vào: hợp đồng có sẵn hay thêm mới từ PDF ────────────────────────────
+  const [inputMode, setInputMode] = useState<'existing' | 'pdf'>('existing');
+
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState<ExtractedContract | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [savingPdf, setSavingPdf] = useState(false);
+  const [resolvingCustomer, setResolvingCustomer] = useState(false);
+
+  const [newContractId, setNewContractId] = useState('');
+  const [newCustomerId, setNewCustomerId] = useState('');
+  const [matchedCustomerName, setMatchedCustomerName] = useState('');
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [newContractValue, setNewContractValue] = useState('');
+  const [newGrossMargin, setNewGrossMargin] = useState('');
+  const [marginFormula, setMarginFormula] = useState<string | null>(null);
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newPaymentTerms, setNewPaymentTerms] = useState('');
+
+  // Sinh sẵn mã hợp đồng tiếp theo khi chuyển sang chế độ "Thêm từ PDF"
+  useEffect(() => {
+    if (inputMode === 'pdf' && !newContractId) {
+      nextContractId().then(setNewContractId).catch(() => {});
+    }
+  }, [inputMode]);
+
+  async function handleExtractPdf() {
+    if (!pdfFile) return;
+    setPdfError(null);
+    setExtracting(true);
+    setExtracted(null);
+    try {
+      const result = await extractContract(pdfFile);
+      setExtracted(result);
+      setNewContractValue(result.contract_value != null ? String(result.contract_value) : '');
+      setNewStartDate(result.start_date || '');
+      setNewEndDate(result.end_date || '');
+      setNewDescription(result.description || '');
+      setNewPaymentTerms(result.payment_terms || '');
+      setNewGrossMargin(result.computed_gross_margin != null ? String(result.computed_gross_margin) : '');
+      setMarginFormula(result.margin_formula);
+
+      setResolvingCustomer(true);
+      try {
+        if (result.matched_customer_id) {
+          const list: Customer[] = await getCustomers();
+          const found = list.find(c => c.customer_id === result.matched_customer_id);
+          setNewCustomerId(result.matched_customer_id);
+          setMatchedCustomerName(found?.customer_name || result.customer_name || '');
+          setIsNewCustomer(false);
+        } else {
+          const newId = await nextCustomerId();
+          setNewCustomerId(newId);
+          setMatchedCustomerName(result.customer_name || '(chưa xác định tên)');
+          setIsNewCustomer(true);
+        }
+      } finally {
+        setResolvingCustomer(false);
+      }
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : 'Lỗi trích xuất PDF');
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  const canSavePdf = Boolean(
+    newContractId.trim() && newCustomerId && newContractValue && newGrossMargin && newStartDate && newEndDate && !resolvingCustomer
+  );
+
+  function resetPdfForm() {
+    setPdfFile(null);
+    setExtracted(null);
+    setNewContractId('');
+    setNewCustomerId('');
+    setMatchedCustomerName('');
+    setIsNewCustomer(false);
+    setNewContractValue('');
+    setNewGrossMargin('');
+    setMarginFormula(null);
+    setNewStartDate('');
+    setNewEndDate('');
+    setNewDescription('');
+    setNewPaymentTerms('');
+  }
+
+  async function handleSaveAndAnalyzePdf() {
+    if (!canSavePdf) return;
+    setPdfError(null);
+    setSavingPdf(true);
+    try {
+      const data = await confirmContract({
+        contract_id: newContractId.trim(),
+        customer_id: newCustomerId,
+        contract_value: parseFloat(newContractValue),
+        gross_margin: parseFloat(newGrossMargin),
+        start_date: newStartDate,
+        end_date: newEndDate,
+        description: newDescription,
+        payment_terms: newPaymentTerms,
+        status: 'Active',
+        ...(isNewCustomer ? { new_customer_name: matchedCustomerName } : {}),
+      });
+      const cid = newContractId.trim();
+      setContractList(prev => prev.includes(cid) ? prev : [...prev, cid]);
+      setSelectedContract(cid);
+      setSelectedRunId(null);
+      setLastResult(data);
+      setAnalysisHistory(h => ({ ...h, [cid]: data }));
+      const runId = addRunEntry({
+        contractId: cid,
+        timestamp: new Date().toISOString(),
+        recommendation: data.zone_decision.recommendation,
+        confidence: data.zone_decision.confidence_score,
+        alertCount: (data.zone_decision.risk_alerts || []).length,
+        resolvedCount: 0,
+      });
+      setLatestRunId(runId);
+      addRunResult(runId, data);
+      addNotification({
+        type: 'info',
+        title: `Đã thêm hợp đồng ${cid} từ PDF`,
+        message: `Khuyến nghị: ${data.zone_decision.recommendation} — Confidence ${(data.zone_decision.confidence_score * 100).toFixed(0)}%`,
+      });
+      resetPdfForm();
+      setInputMode('existing');
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : 'Lỗi lưu hợp đồng');
+    } finally {
+      setSavingPdf(false);
+    }
+  }
 
   // Checklist resolved state — persisted per contract in localStorage
   const storageKey = `checklist_resolved_${selectedContract}`;
@@ -969,54 +1106,217 @@ export function Pipeline() {
         />
       )}
 
-      {/* Controls */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-wrap items-end gap-4 shadow-sm">
-        <div className="min-w-[160px] max-w-[260px] flex-shrink-0">
-          <label className="block text-xs font-semibold text-slate-600 mb-1.5">Hợp đồng</label>
-          <select
-            value={selectedContract}
-            onChange={e => setSelectedContract(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-600"
+      {/* Controls — nguồn đầu vào: hợp đồng có sẵn hoặc thêm mới từ PDF */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setInputMode('existing')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              inputMode === 'existing' ? 'bg-brand-800 text-white' : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
           >
-            {contractList.map(c => <option key={c}>{c}</option>)}
-          </select>
+            <ListChecks size={14} /> Hợp đồng có sẵn
+          </button>
+          <button
+            onClick={() => setInputMode('pdf')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              inputMode === 'pdf' ? 'bg-brand-800 text-white' : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <UploadCloud size={14} /> Thêm mới từ PDF
+          </button>
         </div>
 
-        {result?.zone_workflow.crisis_layer.active && rec !== 'CHUA_DU_DU_LIEU' && rec !== 'KHONG_KY' && (
-          <div className="flex items-center gap-2 pb-1">
-            <label className="text-xs font-semibold text-slate-600">Crisis resolved</label>
+        {inputMode === 'existing' ? (
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="min-w-[160px] max-w-[260px] flex-shrink-0">
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Hợp đồng</label>
+              <select
+                value={selectedContract}
+                onChange={e => setSelectedContract(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-600"
+              >
+                {contractList.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {result?.zone_workflow.crisis_layer.active && rec !== 'CHUA_DU_DU_LIEU' && rec !== 'KHONG_KY' && (
+              <div className="flex items-center gap-2 pb-1">
+                <label className="text-xs font-semibold text-slate-600">Crisis resolved</label>
+                <button
+                  onClick={() => setCrisisResolved(!crisisResolved)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${crisisResolved ? 'bg-green-500' : 'bg-slate-300'}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow ${crisisResolved ? 'translate-x-4' : 'translate-x-1'}`} />
+                </button>
+                <span className="text-xs text-slate-500">{crisisResolved ? 'Đã xử lý' : 'Chưa xử lý'}</span>
+              </div>
+            )}
+
+            {resolvedIds.size > 0 && (
+              <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 font-medium">
+                <CheckCircle size={12} />
+                {resolvedIds.size} mục đã xử lý — sẽ áp dụng khi chạy lại
+                <button
+                  onClick={() => { setResolvedIds(new Set()); localStorage.removeItem(`checklist_resolved_${selectedContract}`); }}
+                  className="ml-1 text-green-500 hover:text-red-500 transition-colors"
+                  title="Xóa tất cả"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            )}
+
             <button
-              onClick={() => setCrisisResolved(!crisisResolved)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${crisisResolved ? 'bg-green-500' : 'bg-slate-300'}`}
+              onClick={handleRun}
+              disabled={isRunning}
+              className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 disabled:bg-brand-800/60 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
             >
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow ${crisisResolved ? 'translate-x-4' : 'translate-x-1'}`} />
+              {isRunning ? <Loader size={15} className="animate-spin" /> : <Play size={15} />}
+              {isRunning ? `Đang chạy bước ${runningStep}/3…` : 'Chạy phân tích'}
             </button>
-            <span className="text-xs text-slate-500">{crisisResolved ? 'Đã xử lý' : 'Chưa xử lý'}</span>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Sparkles size={13} className="text-brand-600 shrink-0" />
+              Upload file hợp đồng gốc — Agent tự đọc, trích xuất dữ liệu, tự sinh mã hợp đồng và đối chiếu khách hàng. Bạn xem lại trước khi lưu &amp; phân tích.
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="flex-1 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-500 cursor-pointer hover:border-brand-400 hover:bg-slate-50">
+                <UploadCloud size={16} className="shrink-0" />
+                <span className="truncate">{pdfFile ? pdfFile.name : 'Chọn file PDF hợp đồng...'}</span>
+                <input
+                  type="file" accept="application/pdf" className="hidden"
+                  onChange={e => setPdfFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              <button
+                onClick={handleExtractPdf}
+                disabled={!pdfFile || extracting}
+                className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 disabled:bg-brand-800/50 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors shrink-0"
+              >
+                {extracting ? <Loader size={15} className="animate-spin" /> : <FileCheck size={15} />}
+                {extracting ? 'Đang trích xuất…' : 'Trích xuất dữ liệu'}
+              </button>
+            </div>
+
+            {pdfError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+                {pdfError}
+              </div>
+            )}
+
+            {extracted && (
+              <div className="border-t border-slate-100 pt-4 space-y-4">
+                <h3 className="text-sm font-semibold text-slate-800">Dữ liệu trích xuất — xem lại và bổ sung trước khi lưu</h3>
+
+                {extracted.missing_fields.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
+                    <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-800">
+                      <div className="font-semibold mb-1">AI không tìm thấy các trường sau trong PDF — cần bạn tự điền:</div>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {extracted.missing_fields.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 rounded-lg px-3 py-2.5">
+                    <div className="text-xs text-slate-500 mb-0.5">Mã hợp đồng (tự sinh)</div>
+                    <div className="text-sm font-semibold text-slate-800">{newContractId || '…'}</div>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-3 py-2.5">
+                    <div className="text-xs text-slate-500 mb-0.5 flex items-center gap-1">
+                      {resolvingCustomer ? (
+                        <><Loader size={11} className="animate-spin" /> Đang đối chiếu khách hàng…</>
+                      ) : isNewCustomer ? (
+                        <><UserPlus size={11} className="text-amber-500" /> Khách hàng mới — sẽ tự tạo khi lưu</>
+                      ) : (
+                        <><UserCheck size={11} className="text-green-500" /> Đã khớp khách hàng có sẵn</>
+                      )}
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {newCustomerId ? `${newCustomerId} — ${matchedCustomerName}` : '…'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Giá trị hợp đồng (VND) <span className="text-red-500">*</span></label>
+                    <input
+                      type="number" value={newContractValue} onChange={e => setNewContractValue(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                      Gross margin (0-1) <span className="text-red-500">*</span>
+                      {marginFormula ? (
+                        <span className="font-normal text-green-600 ml-1">— tự tính từ chi phí trong PDF</span>
+                      ) : (
+                        <span className="font-normal text-slate-400 ml-1">— không có trong PDF, tự nhập theo chi phí nội bộ</span>
+                      )}
+                    </label>
+                    <input
+                      type="number" step="0.01" min="0" max="1" value={newGrossMargin}
+                      onChange={e => { setNewGrossMargin(e.target.value); setMarginFormula(null); }}
+                      placeholder="VD: 0.28"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600"
+                    />
+                    {marginFormula && (
+                      <div className="flex items-start gap-1.5 mt-1.5 text-xs text-slate-500">
+                        <Calculator size={12} className="shrink-0 mt-0.5 text-green-600" />
+                        <span>{marginFormula}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Ngày bắt đầu <span className="text-red-500">*</span></label>
+                    <input
+                      type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Ngày kết thúc <span className="text-red-500">*</span></label>
+                    <input
+                      type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Mô tả</label>
+                    <textarea
+                      value={newDescription} onChange={e => setNewDescription(e.target.value)} rows={2}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Điều khoản thanh toán</label>
+                    <textarea
+                      value={newPaymentTerms} onChange={e => setNewPaymentTerms(e.target.value)} rows={3}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-brand-600 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveAndAnalyzePdf}
+                  disabled={!canSavePdf || savingPdf}
+                  className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+                >
+                  {savingPdf ? <Loader size={15} className="animate-spin" /> : <ArrowRight size={15} />}
+                  {savingPdf ? 'Đang lưu và phân tích (có thể mất 40-90 giây)…' : 'Lưu & Phân tích'}
+                </button>
+              </div>
+            )}
           </div>
         )}
-
-        {resolvedIds.size > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 font-medium">
-            <CheckCircle size={12} />
-            {resolvedIds.size} mục đã xử lý — sẽ áp dụng khi chạy lại
-            <button
-              onClick={() => { setResolvedIds(new Set()); localStorage.removeItem(`checklist_resolved_${selectedContract}`); }}
-              className="ml-1 text-green-500 hover:text-red-500 transition-colors"
-              title="Xóa tất cả"
-            >
-              <X size={11} />
-            </button>
-          </div>
-        )}
-
-        <button
-          onClick={handleRun}
-          disabled={isRunning}
-          className="flex items-center gap-2 bg-brand-800 hover:bg-brand-900 disabled:bg-brand-800/60 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
-        >
-          {isRunning ? <Loader size={15} className="animate-spin" /> : <Play size={15} />}
-          {isRunning ? `Đang chạy bước ${runningStep}/3…` : 'Chạy phân tích'}
-        </button>
       </div>
 
       {/* Error */}
@@ -1549,7 +1849,11 @@ export function Pipeline() {
         <div className="bg-white border border-slate-200 rounded-xl p-16 text-center shadow-sm">
           <Play size={32} className="mx-auto text-slate-300 mb-3" />
           <div className="text-slate-500 text-sm font-medium">Chưa có kết quả phân tích</div>
-          <div className="text-slate-400 text-xs mt-1">Chọn hợp đồng và nhấn "Chạy phân tích" để bắt đầu</div>
+          <div className="text-slate-400 text-xs mt-1">
+            {inputMode === 'pdf'
+              ? 'Upload PDF, trích xuất dữ liệu rồi bấm "Lưu & Phân tích" để bắt đầu'
+              : 'Chọn hợp đồng và nhấn "Chạy phân tích" để bắt đầu'}
+          </div>
         </div>
       )}
     </div>{/* end main content */}

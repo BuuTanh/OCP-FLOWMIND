@@ -48,7 +48,7 @@ CACHE_TTL = 300  # 5 minutes
 
 # 22_API_HANDLING_RULES: thử lại tối đa hai lần có giãn cách trước khi dùng dữ liệu đệm.
 MAX_RETRIES = 2
-RETRY_BACKOFF_SECONDS = 2
+RETRY_BACKOFF_SECONDS = 1
 
 
 def _csv_url(sheet_id: str, tab_name: str) -> str:
@@ -103,6 +103,20 @@ def load_gsheet(key: str) -> pd.DataFrame:
     print(f"[GSheet] {tab_name}: thất bại sau {MAX_RETRIES} lần thử lại, không có dữ liệu đệm. "
           f"Chuyển sang Excel local. Lỗi gốc: {last_error}")
     return _fallback_excel(key)
+
+
+def prefetch_all() -> None:
+    """
+    Tải song song mọi tab thay vì để từng agent tự fetch tuần tự khi cần.
+    ~10-14 tab tải tuần tự có thể mất 10-30s cộng dồn; tải song song chỉ mất bằng
+    thời gian của tab chậm nhất. Gọi 1 lần ở đầu run_pipeline() — sau đó mọi
+    loader.get_x() trong DFA/RCA/DPA đều trúng cache, không phải gọi mạng nữa.
+    Lỗi từng tab (nếu có) vẫn được load_gsheet() tự xử lý (retry/cache/Excel) như bình thường.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    keys = list(SHEET_TAB_MAP.keys())
+    with ThreadPoolExecutor(max_workers=len(keys)) as pool:
+        pool.map(load_gsheet, keys)
 
 
 def _fallback_excel(key: str) -> pd.DataFrame:

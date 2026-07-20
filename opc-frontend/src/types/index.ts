@@ -85,6 +85,39 @@ export interface AnalysisResult {
   agent_logs: unknown[];
 }
 
+export interface Customer {
+  customer_id: string;
+  customer_name: string;
+}
+
+export interface ExtractedContract {
+  customer_name: string | null;
+  contract_value: number | null;
+  estimated_cost: number | null;
+  computed_gross_margin: number | null;
+  margin_formula: string | null;
+  matched_customer_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  description: string | null;
+  payment_terms: string | null;
+  missing_fields: string[];
+  raw_text_preview: string;
+}
+
+export interface ConfirmContractPayload {
+  contract_id: string;
+  customer_id: string;
+  contract_value: number;
+  gross_margin: number;
+  start_date: string;
+  end_date: string;
+  description: string;
+  payment_terms: string;
+  status: string;
+  new_customer_name?: string;
+}
+
 export interface Notification {
   id: string;
   type: 'crisis' | 'warning' | 'info';

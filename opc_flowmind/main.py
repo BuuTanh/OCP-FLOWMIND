@@ -1,10 +1,11 @@
-import json, uuid
+import json, uuid, time
 from agents.dfa import DataFinanceAgent
 from agents.rca import RiskComplianceAgent
 from agents.dpa import DecisionPartnerAgent
 from agents.crisis_layer import run_crisis_scan
 from output.schema import build_final_output
 from config import TARGET_CONTRACT_ID
+from data import gsheet_loader
 
 def run_pipeline(contract_id: str = TARGET_CONTRACT_ID,
                  founder_crisis_resolved: bool = False,
@@ -17,6 +18,12 @@ def run_pipeline(contract_id: str = TARGET_CONTRACT_ID,
     print(f"\n{'='*60}")
     print(f"OPC FlowMind — Phân tích {contract_id} (trace_id={trace_id})")
     print(f"{'='*60}\n")
+
+    # Tải song song mọi tab Google Sheets 1 lần — thay vì để DFA/RCA/DPA lần lượt
+    # tự fetch tuần tự khi cần (mỗi agent gọi loader nhiều lần, cộng dồn rất chậm).
+    t0 = time.time()
+    gsheet_loader.prefetch_all()
+    print(f"[PREFETCH] Đã tải xong dữ liệu Google Sheets trong {time.time()-t0:.1f}s")
 
     print("[CRISIS LAYER] Scanning suspicious transactions...")
     crisis_result = run_crisis_scan(trace_id=trace_id)

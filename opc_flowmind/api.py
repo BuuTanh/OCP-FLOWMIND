@@ -3,16 +3,17 @@ FastAPI server — n8n gọi vào đây qua HTTP Request nodes.
 Chạy: uvicorn api:app --reload --port 8000
 """
 
-import sys, os, uuid
+import sys, os, uuid, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
 import hashlib
+import requests
 from datetime import datetime
 
 # ── Persist config qua Railway restart ───────────────────────────────────────
@@ -38,6 +39,7 @@ from agents.crisis_layer import run_crisis_scan
 from agents.dfa import DataFinanceAgent
 from agents.rca import RiskComplianceAgent
 from agents.dpa import DecisionPartnerAgent
+from agents.extraction_agent import extract_contract_fields
 from models.financial import FinancialProposal
 from models.risk import RiskAssessment
 from output.schema import build_final_output
@@ -240,8 +242,10 @@ def analyze(req: AnalyzeRequest):
     """
     from main import run_pipeline
     import threading
-    # Luôn đọc data mới nhất từ Google Sheets trước mỗi lần phân tích
-    gsheet_loader.invalidate_cache()
+    # Không ép fetch lại Google Sheets mỗi lần — dùng cache 5 phút (data/gsheet_loader.py::CACHE_TTL)
+    # để test nhiều hợp đồng liên tiếp không phải chờ tải lại toàn bộ sheet mỗi lần.
+    # Nếu vừa sửa dữ liệu trên Google Sheets, bấm "Reload cache" trong Cài đặt (/memory/invalidate)
+    # trước khi chạy lại để thấy dữ liệu mới.
     result = run_pipeline(
         contract_id=req.contract_id,
         founder_crisis_resolved=req.crisis_resolved,
@@ -291,6 +295,160 @@ def get_contracts():
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _next_sequential_id(existing_ids: list[str], prefix: str) -> str:
+    """VD prefix='CON' + existing ['CON-001','CON-013'] → 'CON-014'.
+    Không dựa vào số lượng bản ghi (tránh trùng nếu có lỗ hổng mã do xoá dòng),
+    mà lấy đúng số lớn nhất đang có + 1."""
+    max_n = 0
+    for cid in existing_ids:
+        m = re.match(rf'^{prefix}-(\d+)$', cid.strip())
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    return f"{prefix}-{max_n + 1:03d}"
+
+
+@app.get("/next-contract-id")
+def next_contract_id():
+    """Sinh mã hợp đồng tiếp theo tự động (CON-XXX), dùng khi thêm hợp đồng mới từ PDF —
+    founder không phải tự nghĩ/gõ mã, tránh trùng mã thủ công."""
+    try:
+        rows = gsheet_loader.get_contracts()
+        ids = [r.get("contract_id", "") for r in rows]
+        return {"contract_id": _next_sequential_id(ids, "CON")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/next-customer-id")
+def next_customer_id():
+    """Sinh mã khách hàng tiếp theo tự động (CUS-XXX) — dùng khi hợp đồng PDF thuộc
+    về 1 khách hàng chưa từng có trong hệ thống."""
+    try:
+        rows = gsheet_loader.get_customers()
+        ids = [r.get("customer_id", "") for r in rows]
+        return {"customer_id": _next_sequential_id(ids, "CUS")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/customers")
+def get_customers():
+    """Danh sách khách hàng từ Google Sheets (OPC_CoreData tab 03_CUSTOMERS) —
+    dùng để tự động đối chiếu tên khách hàng trích xuất từ PDF với khách hàng đã có."""
+    try:
+        rows = gsheet_loader.get_customers()
+        return [
+            {"customer_id": r.get("customer_id", ""), "customer_name": r.get("customer_name", "")}
+            for r in rows
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/extract-contract")
+async def extract_contract(file: UploadFile = File(...)):
+    """
+    Đọc PDF hợp đồng do founder upload, trích xuất dữ liệu có cấu trúc để xem lại
+    trước khi lưu. KHÔNG ghi gì vào Sheets ở bước này.
+    """
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file PDF")
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=400, detail="File rỗng")
+    try:
+        existing_customers = gsheet_loader.get_customers()
+    except Exception:
+        existing_customers = []
+    try:
+        return extract_contract_fields(pdf_bytes, existing_customers=existing_customers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi trích xuất: {e}")
+
+
+class ConfirmContractRequest(BaseModel):
+    contract_id: str
+    customer_id: str
+    contract_value: float
+    gross_margin: float
+    start_date: str
+    end_date: str
+    description: str = ""
+    payment_terms: str = ""
+    status: str = "Active"
+    # Nếu customer_id là khách hàng MỚI (chưa có trong 03_CUSTOMERS), truyền tên khách
+    # hàng ở đây để hệ thống tự tạo dòng khách hàng mới trước khi ghi hợp đồng.
+    new_customer_name: Optional[str] = None
+
+
+@app.post("/confirm-contract")
+def confirm_contract(req: ConfirmContractRequest):
+    """
+    Founder đã xem lại và xác nhận dữ liệu trích xuất từ PDF (hoặc tự sửa) →
+    1) (nếu là khách hàng mới) ghi khách hàng mới vào Sheets,
+    2) ghi hợp đồng mới vào Google Sheets qua Apps Script,
+    3) chạy phân tích thật ngay để trả kết quả về web,
+    4) nhờ Apps Script gửi email với đúng kết quả vừa có (không phân tích lại lần 2).
+    """
+    apps_script_url = getattr(app.state, "apps_script_url", "")
+    fields = {
+        "contract_id": req.contract_id,
+        "customer_id": req.customer_id,
+        "start_date": req.start_date,
+        "end_date": req.end_date,
+        "status": req.status,
+        "description": req.description,
+        "contract_value": req.contract_value,
+        "gross_margin": req.gross_margin,
+        "payment_terms": req.payment_terms,
+    }
+
+    def _call_apps_script(payload: dict) -> str:
+        """Gọi Apps Script và đọc đúng field 'status' trong JSON trả về —
+        mã HTTP 200 không đủ để biết action có được xử lý đúng hay không
+        (Apps Script cũ chưa có action mới vẫn có thể trả 200 kèm lỗi trong body)."""
+        if not apps_script_url:
+            return "skipped_no_apps_script_url"
+        try:
+            r = requests.post(apps_script_url, json=payload, timeout=15)
+            if r.status_code != 200:
+                return f"failed_http_{r.status_code}"
+            try:
+                body = r.json()
+            except ValueError:
+                return f"failed_non_json_response: {r.text[:200]}"
+            if body.get("status") == "ok":
+                return "ok"
+            return f"failed: {body.get('message', body)}"
+        except Exception as e:
+            return f"unreachable: {e}"
+
+    customer_write_status = "skipped_existing_customer"
+    if req.new_customer_name:
+        customer_write_status = _call_apps_script({
+            "action": "append_customer",
+            "fields": {"customer_id": req.customer_id, "customer_name": req.new_customer_name},
+        })
+
+    sheet_write_status = _call_apps_script({"action": "append_contract", "fields": fields})
+
+    # Cần dữ liệu mới nhất (bao gồm dòng vừa ghi) trước khi phân tích
+    gsheet_loader.invalidate_cache()
+    from main import run_pipeline
+    result = run_pipeline(contract_id=req.contract_id)
+
+    email_status = _call_apps_script({
+        "action": "send_analysis_email", "contract_id": req.contract_id, "result": result
+    })
+
+    result["_import_status"] = {
+        "customer_write": customer_write_status,
+        "sheet_write": sheet_write_status,
+        "email": email_status,
+    }
+    return result
 
 
 @app.get("/cashflow")

@@ -2,11 +2,12 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
-import { Contracts } from './pages/Contracts';
+import { Reports } from './pages/Reports';
 import { Pipeline } from './pages/Pipeline';
 import { Financial } from './pages/Financial';
 import { Risks } from './pages/Risks';
 import { Settings } from './pages/Settings';
+import { Guide } from './pages/Guide';
 
 export default function App() {
   return (
@@ -15,7 +16,8 @@ export default function App() {
         <Layout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/contracts" element={<Contracts />} />
+            <Route path="/guide" element={<Guide />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/financial" element={<Financial />} />
             <Route path="/risks" element={<Risks />} />

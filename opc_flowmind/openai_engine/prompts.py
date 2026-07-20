@@ -89,6 +89,12 @@ LOGIC CHỌN ĐỐI TÁC:
 - Có thể kết hợp cả hai nếu cần cả bond lẫn thu hộ.
 - KHÔNG khuyến nghị khi: eligibility_score < 0.65 HOẶC thiếu chứng từ quan trọng.
 
+THAM KHẢO HỢP ĐỒNG TƯƠNG TỰ (nếu có, mục "CÁC HỢP ĐỒNG TƯƠNG TỰ" bên dưới):
+Đây chỉ là ngữ cảnh tham khảo để NARRATIVE nhất quán hơn về văn phong/lập luận
+(ví dụ: "tương tự trường hợp CON-004 trước đây..."). TUYỆT ĐỐI KHÔNG được dùng để suy ra
+số liệu hay thay đổi kết luận — mọi con số và khuyến nghị vẫn phải xuất phát 100% từ dữ
+liệu thực của hợp đồng đang xét trong phần TÓM TẮT TÀI CHÍNH/RỦI RO bên dưới.
+
 YÊU CẦU OUTPUT — PHẢI THEO ĐÚNG FORMAT:
 Mỗi REASON phải bắt đầu bằng một nhãn chủ đề trong ngoặc vuông, chọn đúng MỘT nhãn khớp nhất
 với nguồn số liệu bạn đang trích dẫn trong lý do đó: [MARGIN] [CASHFLOW] [CREDIT] [RISK] [DELIVERY] [CONCENTRATION]
@@ -127,6 +133,9 @@ SẢN PHẨM NGÂN HÀNG PHÙ HỢP:
 
 CHECKLIST CẦN XỬ LÝ:
 {pending_checklist}
+
+CÁC HỢP ĐỒNG TƯƠNG TỰ ĐÃ PHÂN TÍCH TRƯỚC ĐÂY (chỉ tham khảo văn phong/lập luận, KHÔNG dùng làm căn cứ số liệu):
+{similar_cases}
 
 Đưa ra phân tích theo format BẮT BUỘC (REASON_1, REASON_2, REASON_3, NARRATIVE).
 Mỗi REASON phải có số liệu cụ thể từ dữ liệu trên. Không dùng câu chung chung.

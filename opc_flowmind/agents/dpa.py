@@ -7,6 +7,7 @@ from data.masking import mask_payload_for_openai, mask_amount
 from openai_engine.prompts import DPA_SYSTEM, DPA_USER_TEMPLATE
 from openai_engine.validator import validate_recommendation
 from config import CONFIDENCE_THRESHOLD
+from rag import memory as rag_memory
 import json, re
 
 # Ánh xạ topic (do OpenAI gắn nhãn) → sheet/cell nguồn thật.
@@ -366,6 +367,23 @@ class DecisionPartnerAgent(BaseAgent):
         pending = [item for item in approval_checklist if not any(r in item for r in resolved_items)]
         pending_str = "\n".join(pending) if pending else "Không có — tất cả đã xử lý"
 
+        # RAG: tra cứu các hợp đồng tương tự đã phân tích trước đây (nếu có) để OpenAI
+        # tham khảo khi viết narrative — CHỈ ảnh hưởng tới cách diễn giải, KHÔNG ảnh hưởng
+        # tới recommendation tất định (vẫn tính hoàn toàn từ số liệu ở trên, không đổi).
+        similar_cases_str = "Không có hợp đồng tương tự nào trong bộ nhớ."
+        try:
+            rag_context = f"{financial.narrative[:200]} {risk.narrative[:200]}"
+            similar_cases = rag_memory.query_similar(contract_id, rag_context, n_results=3)
+            print(f"[RAG] Tìm thấy {len(similar_cases)} hợp đồng tương tự cho {contract_id}")
+            if similar_cases:
+                similar_cases_str = "\n".join(
+                    f"- {c['contract_id']}: khuyến nghị {c['recommendation']} "
+                    f"(confidence {c['confidence']}) — {c['summary'][:150]}"
+                    for c in similar_cases
+                )
+        except Exception:
+            pass  # RAG là tính năng bổ trợ — lỗi ở đây không được làm hỏng luồng chính
+
         user_prompt = DPA_USER_TEMPLATE.format(
             financial_narrative=financial.narrative[:300],
             risk_narrative=risk.narrative[:300],
@@ -376,7 +394,8 @@ class DecisionPartnerAgent(BaseAgent):
             gross_margin=f"{financial.gross_margin_actual:.0%}",
             contract_type=target_contract.get("description", ""),
             bank_products=json.dumps(products_masked, ensure_ascii=False),
-            pending_checklist=pending_str
+            pending_checklist=pending_str,
+            similar_cases=similar_cases_str
         )
         narrative, call_id, prompt_hash = self.safe_openai_call(DPA_SYSTEM, user_prompt)
 

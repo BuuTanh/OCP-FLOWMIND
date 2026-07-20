@@ -1,41 +1,55 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, DollarSign, AlertTriangle, TrendingUp, Play, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  AreaChart, Area, XAxis, YAxis, ReferenceLine,
+} from 'recharts';
+import {
+  FileText, DollarSign, AlertTriangle, TrendingUp, AlertCircle,
+  CheckCircle, History, ArrowRight, Play,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useApi } from '../hooks/useApi';
 import { KpiCard } from '../components/KpiCard';
 import { StatusBadge } from '../components/StatusBadge';
-import type { Contract, Recommendation } from '../types';
+import type { Contract, Recommendation, CashflowMonth } from '../types';
 
 function formatVnd(v: number) {
-  if (v >= 1e9) return `${(v / 1e9).toFixed(1)} tỷ`;
-  if (v >= 1e6) return `${(v / 1e6).toFixed(0)} triệu`;
+  if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)} tỷ`;
+  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(0)} triệu`;
   return v.toLocaleString('vi-VN');
 }
 
-function DecisionBadge({ action }: { action: string }) {
-  if (action === 'KY') return <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✅ Đã ký</span>;
-  if (action === 'KHONG_KY') return <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">❌ Từ chối</span>;
-  if (action === 'YEU_CAU') return <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">📋 Bổ sung</span>;
-  return null;
+function formatM(v: number) {
+  if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(1)}tỷ`;
+  return `${(v / 1e6).toFixed(0)}M`;
 }
 
-function MarginDot({ m }: { m: number }) {
-  const color = m >= 0.28 ? 'bg-green-500' : m >= 0.24 ? 'bg-amber-400' : 'bg-red-500';
-  return <span className={`inline-block w-2 h-2 rounded-full ${color} mr-1.5`} />;
-}
+const REC_COLORS: Record<string, string> = {
+  KY: '#22c55e',
+  KY_CO_DIEU_KIEN: '#f59e0b',
+  KHONG_KY: '#ef4444',
+  CHUA_DU_DU_LIEU: '#94a3b8',
+  CHUA_DU_DATA: '#94a3b8',
+};
+
+const REC_LABELS: Record<string, string> = {
+  KY: 'Ký',
+  KY_CO_DIEU_KIEN: 'Ký có ĐK',
+  KHONG_KY: 'Không ký',
+  CHUA_DU_DU_LIEU: 'Chưa đủ DL',
+  CHUA_DU_DATA: 'Chưa đủ DL',
+};
 
 export function Dashboard() {
   const navigate = useNavigate();
   const { lastResult, analysisHistory, setSelectedContract, setLastResult, crisisResolved, runLog } = useApp();
-  const { getContracts } = useApi();
+  const { getContracts, getCashflow, getReceivables } = useApi();
 
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
-  const [decisions, setDecisions] = useState<Record<string, { action: string; timestamp: string }>>({});
-  const [cashPosition, setCashPosition] = useState<{ value: number; month: string; status: string } | null>(null);
-
-  const API_BASE: string = (import.meta.env.VITE_API_URL as string) ?? 'http://localhost:8000';
+  const [cashflow, setCashflow] = useState<CashflowMonth[]>([]);
+  const [receivables, setReceivables] = useState<{ open_vnd: number; pipeline_vnd: number } | null>(null);
 
   useEffect(() => {
     getContracts()
@@ -45,39 +59,48 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API_BASE}/cashflow`)
-      .then(r => r.json())
-      .then((rows: { month: string; projected_closing_cash: number; status: string }[]) => {
-        if (!rows || rows.length === 0) return;
-        // Lấy tháng gần nhất có dữ liệu
-        const last = rows[rows.length - 1];
-        setCashPosition({ value: last.projected_closing_cash, month: last.month, status: last.status });
-      })
+    Promise.all([getCashflow(), getReceivables()])
+      .then(([cf, rec]) => { setCashflow(cf); setReceivables(rec); })
       .catch(() => {});
-  }, []);
-
-  // Poll founder decisions every 30s
-  useEffect(() => {
-    function fetchDecisions() {
-      fetch(`${API_BASE}/get-decisions`)
-        .then(r => r.json())
-        .then(data => setDecisions(data))
-        .catch(() => {});
-    }
-    fetchDecisions();
-    const id = setInterval(fetchDecisions, 30_000);
-    return () => clearInterval(id);
   }, []);
 
   const totalValue = contracts.reduce((s, c) => s + c.contract_value, 0);
   const historyEntries = Object.entries(analysisHistory);
   const allAlerts = historyEntries.flatMap(([, r]) => r.zone_decision.risk_alerts || []);
   const criticalCount = allAlerts.filter(a => a.severity === 'Critical').length;
-  const cashPositionValue = cashPosition?.value ?? lastResult?.zone_input.cashflow_chart[0]?.projected_closing_cash;
+
+  const displayCashflow = lastResult?.zone_input.cashflow_chart?.length
+    ? lastResult.zone_input.cashflow_chart
+    : cashflow;
+  const cashPositionRow = displayCashflow[displayCashflow.length - 1];
+  const cashPositionValue = cashPositionRow?.projected_closing_cash;
+
+  const openAR = receivables?.open_vnd ?? lastResult?.zone_input.receivables?.open_vnd ?? 0;
+  const avgMargin = contracts.length ? contracts.reduce((s, c) => s + c.gross_margin, 0) / contracts.length : 0;
 
   // Crisis banner: active only when actual analysis detected crisis AND not resolved
   const crisisActive = lastResult?.zone_workflow.crisis_layer.active && !crisisResolved;
   const hasCrisisData = lastResult != null;
+
+  // Chart tổng hợp: phân bố khuyến nghị trên các hợp đồng đã phân tích
+  const decisionData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    historyEntries.forEach(([, r]) => {
+      const rec = r.zone_decision.recommendation;
+      counts[rec] = (counts[rec] || 0) + 1;
+    });
+    return Object.entries(counts).map(([key, value]) => ({
+      key, value, name: REC_LABELS[key] || key, color: REC_COLORS[key] || '#94a3b8',
+    }));
+  }, [historyEntries]);
+  const totalAnalyzed = historyEntries.length;
+
+  function goToRun(contractId: string) {
+    setSelectedContract(contractId);
+    const hist = analysisHistory[contractId];
+    if (hist) setLastResult(hist);
+    navigate('/pipeline');
+  }
 
   return (
     <div className="space-y-6">
@@ -128,9 +151,9 @@ export function Dashboard() {
         <KpiCard
           label="Cash position"
           value={cashPositionValue != null ? formatVnd(cashPositionValue) : '—'}
-          sub={cashPosition ? `${cashPosition.month} · ${cashPosition.status === 'CRITICAL' ? '⚠ Nguy hiểm' : cashPosition.status === 'WARNING' ? '⚠ Cảnh báo' : '✓ Ổn định'}` : cashPositionValue != null ? 'tháng gần nhất' : 'Đang tải…'}
+          sub={cashPositionRow ? `${cashPositionRow.month} · ${cashPositionRow.status === 'CRITICAL' ? '⚠ Nguy hiểm' : cashPositionRow.status === 'WARNING' ? '⚠ Cảnh báo' : '✓ Ổn định'}` : 'Đang tải…'}
           icon={TrendingUp}
-          iconColor={cashPosition?.status === 'CRITICAL' ? 'text-red-500' : cashPosition?.status === 'WARNING' ? 'text-amber-500' : 'text-blue-600'}
+          iconColor={cashPositionRow?.status === 'CRITICAL' ? 'text-red-500' : cashPositionRow?.status === 'WARNING' ? 'text-amber-500' : 'text-blue-600'}
         />
         <KpiCard
           label="Cảnh báo rủi ro"
@@ -143,123 +166,133 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Content grid */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {/* Contract list */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-            <h2 className="font-semibold text-slate-800 text-sm">Danh sách hợp đồng</h2>
-            <div className="flex items-center gap-3">
-              {loadingContracts && <RefreshCw size={13} className="animate-spin text-slate-400" />}
-              <button onClick={() => navigate('/contracts')} className="text-xs text-brand-600 hover:underline font-medium">Xem tất cả →</button>
-            </div>
+      {/* Chart tổng hợp + Sức khỏe tài chính */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Tổng hợp kết quả phân tích */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-800 text-sm">Tổng hợp kết quả phân tích</h2>
+            <span className="text-xs text-slate-400">{totalAnalyzed} hợp đồng đã phân tích</span>
           </div>
-          {contracts.length === 0 && !loadingContracts ? (
-            <div className="px-5 py-10 text-center text-sm text-slate-400">Không tải được dữ liệu — đảm bảo backend đang chạy</div>
+          {totalAnalyzed === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-10">Chưa có phân tích nào — chạy phân tích AI để xem tổng hợp</div>
           ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50 text-xs text-slate-500 font-medium">
-                  <th className="text-left px-5 py-3">Hợp đồng</th>
-                  <th className="text-right px-5 py-3">Giá trị</th>
-                  <th className="text-right px-5 py-3">Margin</th>
-                  <th className="text-center px-5 py-3">Kết quả AI</th>
-                  <th className="text-center px-5 py-3">Founder</th>
-                  <th className="text-center px-5 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {contracts.map(c => {
-                  const result = analysisHistory[c.contract_id];
-                  const rec = result?.zone_decision.recommendation as Recommendation | undefined;
-                  return (
-                    <tr
-                      key={c.contract_id}
-                      className="hover:bg-slate-50 text-sm cursor-pointer"
-                      onClick={() => {
-                        setSelectedContract(c.contract_id);
-                        const hist = analysisHistory[c.contract_id];
-                        if (hist) setLastResult(hist);
-                        navigate('/pipeline');
-                      }}
-                    >
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-slate-800">{c.contract_id}</div>
-                        <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[180px]">{c.description}</div>
-                      </td>
-                      <td className="px-5 py-3 text-right text-slate-700 font-medium">{formatVnd(c.contract_value)}</td>
-                      <td className="px-5 py-3 text-right">
-                        <span className="flex items-center justify-end">
-                          <MarginDot m={c.gross_margin} />
-                          <span className={`font-medium ${c.gross_margin >= 0.28 ? 'text-green-600' : c.gross_margin >= 0.24 ? 'text-amber-600' : 'text-red-600'}`}>
-                            {(c.gross_margin * 100).toFixed(0)}%
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        {rec ? <StatusBadge value={rec} /> : <span className="text-xs text-slate-300">—</span>}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        {decisions[c.contract_id]
-                          ? <DecisionBadge action={decisions[c.contract_id].action} />
-                          : <span className="text-xs text-slate-300">—</span>}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        <button
-                          onClick={e => { e.stopPropagation(); setSelectedContract(c.contract_id); setLastResult(null); navigate('/pipeline'); }}
-                          className="text-xs text-brand-600 hover:text-brand-800 font-medium"
-                        >
-                          Phân tích
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <h2 className="font-semibold text-slate-800 text-sm mb-4">Thao tác nhanh</h2>
-            <button
-              onClick={() => navigate('/pipeline')}
-              className="w-full flex items-center justify-center gap-2 bg-brand-800 hover:bg-brand-900 text-white text-sm font-semibold py-3 rounded-lg transition-colors"
-            >
-              <Play size={15} /> Chạy phân tích AI
-            </button>
-            <button
-              onClick={() => navigate('/risks')}
-              className="mt-2 w-full text-sm font-medium text-slate-600 hover:text-slate-800 border border-slate-200 py-2.5 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              Xem cảnh báo rủi ro
-            </button>
-          </div>
-
-          {/* Recent runs from runLog */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <h2 className="font-semibold text-slate-800 text-sm mb-3">Phân tích gần đây</h2>
-            {runLog.length === 0 ? (
-              <div className="text-sm text-slate-400 text-center py-6">Chưa có phân tích nào</div>
-            ) : (
-              <div className="space-y-2">
-                {runLog.slice(0, 6).map(entry => (
-                  <div key={entry.id} className="flex items-center justify-between py-1.5 text-sm">
-                    <div>
-                      <span className="font-medium text-slate-700">{entry.contractId}</span>
-                      <span className="text-xs text-slate-400 ml-2">
-                        {new Date(entry.timestamp).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
-                      </span>
-                    </div>
-                    <StatusBadge value={entry.recommendation as Recommendation} />
+            <div className="flex items-center gap-6">
+              <div className="w-36 h-36 shrink-0 relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={decisionData} dataKey="value" nameKey="name" innerRadius={42} outerRadius={62} paddingAngle={2} stroke="none">
+                      {decisionData.map(d => <Cell key={d.key} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value, name) => [`${value} hợp đồng`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-xl font-bold text-slate-800">{totalAnalyzed}</span>
+                  <span className="text-[10px] text-slate-400">đã phân tích</span>
+                </div>
+              </div>
+              <div className="flex-1 space-y-2">
+                {decisionData.map(d => (
+                  <div key={d.key} className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                      {d.name}
+                    </span>
+                    <span className="font-semibold text-slate-800">{d.value}</span>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          )}
+        </div>
+
+        {/* Sức khỏe tài chính */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-800 text-sm">Sức khỏe tài chính</h2>
+            <button onClick={() => navigate('/financial')} className="text-xs text-brand-600 hover:underline font-medium">Chi tiết →</button>
+          </div>
+          {displayCashflow.length === 0 ? (
+            <div className="text-sm text-slate-400 text-center py-10">Đang tải dữ liệu…</div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-3 text-xs">
+                <span className={`inline-flex items-center gap-1.5 font-semibold px-2.5 py-1 rounded-full ${
+                  cashPositionRow?.status === 'CRITICAL' ? 'bg-red-100 text-red-700'
+                  : cashPositionRow?.status === 'WARNING' ? 'bg-amber-100 text-amber-700'
+                  : 'bg-green-100 text-green-700'
+                }`}>
+                  {cashPositionRow?.status === 'CRITICAL' ? '⚠ Nguy hiểm' : cashPositionRow?.status === 'WARNING' ? '⚠ Cảnh báo' : '✓ Ổn định'}
+                </span>
+                <span className="text-slate-400">{cashPositionRow?.month} · {formatM(cashPositionValue ?? 0)}</span>
+              </div>
+              <ResponsiveContainer width="100%" height={110}>
+                <AreaChart data={displayCashflow.slice(-6)} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="cashGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis hide />
+                  <Tooltip formatter={v => formatM(Number(v))} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
+                  <ReferenceLine y={550_000_000} stroke="#f59e0b" strokeDasharray="4 4" />
+                  <Area type="monotone" dataKey="projected_closing_cash" stroke="#3b82f6" fill="url(#cashGrad)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100 text-xs">
+                <div>
+                  <div className="text-slate-400">Công nợ mở (AR)</div>
+                  <div className="font-semibold text-slate-700">{formatM(openAR)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Margin TB danh mục</div>
+                  <div className={`font-semibold ${avgMargin >= 0.28 ? 'text-green-600' : 'text-amber-600'}`}>{(avgMargin * 100).toFixed(1)}%</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Lịch sử phân tích */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
+            <History size={15} className="text-slate-400" /> Phân tích gần đây
+          </h2>
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate('/pipeline')} className="text-xs text-slate-500 hover:text-brand-700 font-medium flex items-center gap-1">
+              <Play size={12} /> Phân tích mới
+            </button>
+            <button onClick={() => navigate('/pipeline')} className="text-xs text-brand-600 hover:underline font-medium flex items-center gap-1">
+              Xem toàn bộ lịch sử <ArrowRight size={12} />
+            </button>
           </div>
         </div>
+        {runLog.length === 0 ? (
+          <div className="text-sm text-slate-400 text-center py-6">Chưa có phân tích nào</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {runLog.slice(0, 6).map(entry => (
+              <div
+                key={entry.id}
+                onClick={() => goToRun(entry.contractId)}
+                className="flex items-center justify-between py-2.5 px-2 -mx-2 text-sm rounded-lg cursor-pointer hover:bg-slate-50"
+              >
+                <div>
+                  <span className="font-medium text-slate-700">{entry.contractId}</span>
+                  <span className="text-xs text-slate-400 ml-2">
+                    {new Date(entry.timestamp).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                </div>
+                <StatusBadge value={entry.recommendation as Recommendation} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
