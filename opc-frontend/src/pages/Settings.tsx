@@ -36,6 +36,13 @@ export function Settings() {
 
   useEffect(() => {
     axios.get(`${API_BASE}/memory/stats`).then(r => setMemoryStats(r.data)).catch(() => {});
+    // Đồng bộ schedule + URL từ Railway (phòng khi mở từ máy khác)
+    axios.get(`${API_BASE}/get-schedule`).then(r => {
+      const { interval, apps_script_url, notify_emails } = r.data;
+      if (interval)         { setSchedule(interval);      setSavedSchedule(interval);      localStorage.setItem('schedule', interval); }
+      if (apps_script_url)  { setAppsScriptUrl(apps_script_url); localStorage.setItem('apps_script_url', apps_script_url); }
+      if (notify_emails?.length) { setEmails(notify_emails); localStorage.setItem('notify_emails', JSON.stringify(notify_emails)); }
+    }).catch(() => {});
   }, []);
 
   function save() {

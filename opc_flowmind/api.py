@@ -698,8 +698,16 @@ def set_schedule(body: dict):
         **({"notify_emails": emails} if emails else {}),
     })
 
+    # Fallback: dùng URL đã lưu trong config nếu request không gửi kèm URL mới
+    effective_url    = apps_script_url or getattr(app.state, "apps_script_url", "")
+    effective_emails = emails or getattr(app.state, "notify_emails", [])
+
     # Gọi Apps Script Web App để tự động cài trigger + lưu emails
     apps_script_result = None
+    if effective_url:
+        apps_script_url = effective_url
+        if not emails:
+            emails = effective_emails
     if apps_script_url:
         params = {"interval": interval}
         if emails:
@@ -735,9 +743,12 @@ def reset_memory():
 
 @app.get("/get-schedule")
 def get_schedule():
-    """Apps Script gọi để lấy interval hiện tại."""
-    interval = getattr(app.state, "schedule_interval", "off")
-    return {"interval": interval}
+    """Frontend và Apps Script gọi để lấy cấu hình hiện tại."""
+    return {
+        "interval":        getattr(app.state, "schedule_interval", "off"),
+        "apps_script_url": getattr(app.state, "apps_script_url", ""),
+        "notify_emails":   getattr(app.state, "notify_emails", []),
+    }
 
 
 def _safe_float(v) -> float:
